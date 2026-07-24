@@ -64,21 +64,64 @@ pub struct EuvPlaygroundDefaultCodeResponse {
 /// + glue JS + wasm bytes as base64-encoded JSON.
 #[derive(Clone, Data, Debug, Default, Deserialize, Serialize, ToSchema)]
 pub struct EuvPlaygroundRunResponse {
-    /// Whether the build succeeded.
+    /// Whether the request to enqueue the build was accepted. The actual
+    /// build runs asynchronously after this response is sent, so `ok`
+    /// here means "queued", not "compiled".
     pub(super) ok: bool,
-    /// `index.html` content (base64). Empty when `ok` is false.
+    /// Build job id assigned by the server, URL-encoded the same way
+    /// order records encode their ids (`Encode::execute(CHARSETS, ...)`).
+    /// The frontend uses this string directly as the path segment for
+    /// `GET /api/euv/playground/run/status/{id}`.
+    pub(super) job_id: String,
+    /// Always `"pending"` at the moment this response is sent. The
+    /// frontend can use the field without having to map the http code.
+    pub(super) status: String,
+    /// Empty on success. On `ok=false` (e.g. broker not initialized)
+    /// this carries the human-readable error so the frontend can show
+    /// it instead of a generic toast.
+    pub(super) message: String,
+    /// Reserved for the legacy in-process response shape — always empty
+    /// in the async path. Kept so older clients that look for the key
+    /// don't get `undefined` and crash.
     pub(super) html: String,
-    /// wasm-bindgen glue JS content (base64). Empty when `ok` is false.
+    /// See [`Self::html`].
     pub(super) js: String,
-    /// Compiled wasm bytes (base64). Empty when `ok` is false.
+    /// See [`Self::html`].
     pub(super) wasm: String,
-    /// Combined compile + linker stderr; non-empty when `ok` is false.
+    /// See [`Self::html`].
     pub(super) stderr: String,
-    /// Absolute path the frontend should load in its preview iframe
-    /// once the build succeeds. Empty when `ok` is false. Always
-    /// follows `/static/euv-playground/builds/{project_id}/index.html`
-    /// (the static-resource route serves the published artefacts
-    /// directly), but the server returns the URL so the frontend
-    /// doesn't have to reconstruct it.
+    /// Empty when `ok` is false. Populated by the status endpoint once
+    /// the worker finishes, so the run response itself never carries it.
     pub(super) build_url: String,
+}
+
+/// Response body for `GET /api/euv/playground/run/status/{job_id}`.
+///
+/// Mirrors [`EuvPlaygroundRunResponse`] but adds the terminal-state
+/// fields the frontend needs (`status`, `build_url`, `stderr`,
+/// `updated_at_ms`). Both `job_id` and `project_id` are URL-encoded
+/// strings so callers can copy them straight into the next request.
+#[derive(Clone, Data, Debug, Default, Deserialize, Serialize, ToSchema)]
+pub struct EuvPlaygroundBuildStatusResponse {
+    /// Build job id echoed back from the URL, URL-encoded for round-trip
+    /// safety with the `POST /run` response.
+    pub(super) job_id: String,
+    /// Project id the job belongs to (URL-encoded; the sidebar can
+    /// pass it straight to `GET /api/euv/playground/projects/get/{id}`
+    /// without re-encoding).
+    pub(super) project_id: String,
+    /// One of `pending` / `running` / `success` / `failed`.
+    pub(super) status: String,
+    /// When `status == "success"`, the absolute path the frontend
+    /// should load in its preview iframe. Empty otherwise.
+    pub(super) build_url: String,
+    /// When `status == "failed"`, the captured compile / linker output
+    /// the frontend can render in its stderr pane. Empty otherwise.
+    pub(super) stderr: String,
+    /// Wall-clock timestamp (ms since unix epoch) the row was created.
+    pub(super) created_at_ms: i64,
+    /// Wall-clock timestamp (ms since unix epoch) of the last status
+    /// transition. The frontend uses this to render a live "updated
+    /// Xs ago" label while the job is still in flight.
+    pub(super) updated_at_ms: i64,
 }

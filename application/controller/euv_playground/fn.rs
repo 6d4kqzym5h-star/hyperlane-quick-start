@@ -123,6 +123,28 @@ pub fn openapi_euv_playground_projects_delete() {}
 #[instrument_trace]
 pub fn openapi_euv_playground_run() {}
 
+/// openapi for the euv playground run status endpoint.
+#[utoipa::path(
+    get,
+    path = "/api/euv/playground/run/status/{id}",
+    params(
+        ("id" = u64, Path, description = "Build job id returned by /run")
+    ),
+    responses(
+        (status = 200, description = "Success"),
+        (status = 400, description = "Bad Request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Job not found"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    tag = "euv_playground",
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[instrument_trace]
+pub fn openapi_euv_playground_run_status() {}
+
 /// openapi for the euv playground default-code endpoint.
 #[utoipa::path(
     get,

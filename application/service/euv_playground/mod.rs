@@ -2,12 +2,16 @@ mod r#const;
 mod r#impl;
 mod r#static;
 mod r#struct;
+mod r#type;
 
-pub use {r#const::*, r#static::*, r#struct::*};
+pub use {r#const::*, r#static::*, r#struct::*, r#type::*};
 
 use super::*;
 
-use hyperlane_config::application::charset::*;
+use {
+    hyperlane_config::application::{charset::*, euv_playground::*},
+    hyperlane_plugin::message_queue::*,
+};
 
 use std::{
     env::{split_paths, temp_dir, var_os},

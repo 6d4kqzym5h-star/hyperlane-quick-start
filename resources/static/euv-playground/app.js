@@ -5,7 +5,10 @@
   const API_SAVE = (id) => '/api/euv/playground/projects/save/' + id;
   const API_DELETE = (id) => '/api/euv/playground/projects/delete/' + id;
   const API_RUN = '/api/euv/playground/run';
+  const API_RUN_STATUS = (jobId) => '/api/euv/playground/run/status/' + jobId;
   const API_DEFAULT_CODE = '/api/euv/playground/default-code';
+  const POLL_INTERVAL_MS = 1500;
+  const POLL_TIMEOUT_MS = 10 * 60 * 1000;
   const STORAGE_KEY = '[euv-playground]last_project_id';
   let cachedDefaultCode = '';
 
@@ -40,6 +43,8 @@
     defaultCodeLoaded: false,
     lastBuildUrl: '',
     runToken: 0,
+    pollTimer: null,
+    pollStartedAt: 0,
   };
 
   function $(id) {
@@ -266,6 +271,17 @@
       };
     }
     return r.body.data || { ok: false, stderr: 'Empty response' };
+  }
+
+  async function fetchBuildStatus(jobId) {
+    const r = await apiJson(API_RUN_STATUS(jobId), {
+      method: 'GET',
+      credentials: 'include',
+    });
+    if (!r.resp.ok || !r.body || !r.body.data) {
+      return null;
+    }
+    return r.body.data;
   }
 
   function renderSignedOut() {
@@ -643,6 +659,82 @@
     hidePreviewLoading();
   }
 
+  function cancelPoll() {
+    if (state.pollTimer) {
+      clearTimeout(state.pollTimer);
+      state.pollTimer = null;
+    }
+  }
+
+  async function pollUntilDone(jobId, myToken) {
+    if (Date.now() - state.pollStartedAt > POLL_TIMEOUT_MS) {
+      if (myToken !== state.runToken) return;
+      cancelPoll();
+      state.running = false;
+      const runBtn = $('pg-run');
+      if (runBtn) runBtn.removeAttribute('disabled');
+      hidePreviewLoading();
+      setStatus('Build timed out', 'error');
+      showStderr(
+        'Build did not finish within ' +
+          Math.round(POLL_TIMEOUT_MS / 1000) +
+          's. Check the server logs.',
+      );
+      return;
+    }
+    const data = await fetchBuildStatus(jobId);
+    if (myToken !== state.runToken) return;
+    if (!data) {
+      if (myToken !== state.runToken) return;
+      state.pollTimer = setTimeout(function () {
+        pollUntilDone(jobId, myToken);
+      }, POLL_INTERVAL_MS);
+      return;
+    }
+    const status = data.status || '';
+    const elapsed = Math.max(
+      0,
+      Math.round((Date.now() - state.pollStartedAt) / 1000),
+    );
+    if (status === 'pending') {
+      setStatus('Queued (' + elapsed + 's elapsed)', 'running');
+      showPreviewLoading('Queued for build…');
+    } else if (status === 'running') {
+      setStatus('Building… (' + elapsed + 's elapsed)', 'running');
+      showPreviewLoading('Building…');
+    } else {
+      cancelPoll();
+      state.running = false;
+      const runBtn = $('pg-run');
+      if (runBtn) runBtn.removeAttribute('disabled');
+      if (status === 'success') {
+        if (data.build_url) {
+          state.lastBuildUrl = data.build_url;
+          applyPreviewToIframe(null, data.build_url);
+          showShareButton();
+          setStatus('Running', '');
+        } else {
+          setStatus('Build URL missing from status', 'error');
+          showStderr('server did not return a build_url for this job');
+        }
+      } else if (status === 'failed') {
+        setStatus('Build failed', 'error');
+        const stderrText =
+          (data.stderr && data.stderr.trim()) || '(no stderr returned)';
+        showStderr(stderrText);
+        scrollStderrToTop();
+      } else {
+        setStatus('Unknown status: ' + status, 'error');
+        showStderr('Unexpected build status: ' + status);
+      }
+      hidePreviewLoading();
+      return;
+    }
+    state.pollTimer = setTimeout(function () {
+      pollUntilDone(jobId, myToken);
+    }, POLL_INTERVAL_MS);
+  }
+
   async function runCurrent() {
     if (state.running) {
       toast('Build already in progress…', 'info');
@@ -663,43 +755,47 @@
     state.runToken += 1;
     const myToken = state.runToken;
     if (runBtn) runBtn.setAttribute('disabled', '');
-    setStatus('Building… (cold start ~20-30s, hot ~2s)', 'running');
+    setStatus('Submitting…', 'running');
     clearStderr();
-    showPreviewLoading('Building…');
+    showPreviewLoading('Submitting build…');
     try {
       const data = await runProject(projectId, code);
       if (myToken !== state.runToken) return;
       if (!data.ok) {
-        setStatus('Build failed', 'error');
+        state.running = false;
+        if (runBtn) runBtn.removeAttribute('disabled');
+        hidePreviewLoading();
         const stderrText =
-          (data.stderr && data.stderr.trim()) || '(no stderr returned)';
+          (data.message && data.message.trim()) ||
+          (data.stderr && data.stderr.trim()) ||
+          '(no error returned)';
+        setStatus('Submit failed', 'error');
         showStderr(stderrText);
         scrollStderrToTop();
         return;
       }
-      state.currentSession =
-        String(Date.now()) + '-' + Math.random().toString(36).slice(2, 8);
-      if (data && data.build_url) {
-        state.lastBuildUrl = data.build_url;
-        applyPreviewToIframe(null, data.build_url);
-        showShareButton();
-      } else {
-        setStatus('Build URL missing from response', 'error');
-        showStderr('server did not return a build_url in the run response');
+      const jobId = data.job_id;
+      if (typeof jobId !== 'number' && typeof jobId !== 'string') {
+        state.running = false;
+        if (runBtn) runBtn.removeAttribute('disabled');
+        hidePreviewLoading();
+        setStatus('Submit failed', 'error');
+        showStderr('Server did not return a job id');
+        return;
       }
-      setStatus('Running', '');
+      state.pollStartedAt = Date.now();
+      cancelPoll();
+      pollUntilDone(String(jobId), myToken);
     } catch (e) {
       if (myToken !== state.runToken) return;
+      cancelPoll();
+      state.running = false;
+      if (runBtn) runBtn.removeAttribute('disabled');
+      hidePreviewLoading();
       const msg = e && e.stack ? e.stack : String(e);
       setStatus('Request failed', 'error');
       showStderr(msg);
       scrollStderrToTop();
-    } finally {
-      if (myToken === state.runToken) {
-        state.running = false;
-        if (runBtn) runBtn.removeAttribute('disabled');
-        hidePreviewLoading();
-      }
     }
   }
 

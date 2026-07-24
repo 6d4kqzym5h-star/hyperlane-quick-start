@@ -11,7 +11,7 @@ impl EuvPlaygroundService {
     ///
     /// # Arguments
     ///
-    /// - `id: i64` - The numeric id to encode.
+    /// - `i64` - The numeric id to encode.
     ///
     /// # Returns
     ///
@@ -38,7 +38,7 @@ impl EuvPlaygroundService {
     ///
     /// # Arguments
     ///
-    /// - `encoded: &str` - The encoded id.
+    /// - `&str` - The encoded id.
     ///
     /// # Returns
     ///
@@ -51,6 +51,54 @@ impl EuvPlaygroundService {
             .unwrap_or_else(|_| encoded.to_string());
         decoded
             .parse::<i64>()
+            .map_err(|_: ParseIntError| ERROR_INVALID_ID_FORMAT.to_string())
+    }
+
+    /// URL-encodes a build job id the same way [`Self::encode_id`] does
+    /// for project ids, so URL path components and response fields can
+    /// travel through the network as plain ASCII.
+    ///
+    /// # Arguments
+    ///
+    /// - `BuildJobId` - The numeric build job id.
+    ///
+    /// # Returns
+    ///
+    /// - `String`: The encoded job id; never fails (mirrors
+    ///   [`Self::encode_id`]).
+    #[instrument_trace]
+    pub fn encode_job_id(job_id: BuildJobId) -> String {
+        Encode::execute(CHARSETS, &job_id.to_string())
+            .map(|encoded: String| {
+                if encoded.is_empty() {
+                    job_id.to_string()
+                } else {
+                    encoded
+                }
+            })
+            .unwrap_or_else(|_| job_id.to_string())
+    }
+
+    /// Inverse of [`Self::encode_job_id`]. Decodes an obfuscated job id
+    /// string back into its numeric `u64`. Falls back to a plain `u64`
+    /// parse for backward compatibility with callers that pass an un-
+    /// encoded id.
+    ///
+    /// # Arguments
+    ///
+    /// - `&str` - The encoded job id string.
+    ///
+    /// # Returns
+    ///
+    /// - `Result<BuildJobId, String>`: The decoded numeric job id, or an
+    ///   error string if the format is invalid.
+    #[instrument_trace]
+    pub fn decode_job_id(encoded: &str) -> Result<BuildJobId, String> {
+        let decoded: String = Decode::execute(CHARSETS, encoded)
+            .map(|s: String| s)
+            .unwrap_or_else(|_| encoded.to_string());
+        decoded
+            .parse::<BuildJobId>()
             .map_err(|_: ParseIntError| ERROR_INVALID_ID_FORMAT.to_string())
     }
 
@@ -88,10 +136,10 @@ impl EuvPlaygroundService {
     ///
     /// # Arguments
     ///
-    /// - `override_path: Option<&OsStr>` - Explicit executable override.
-    /// - `path: Option<&OsStr>` - Process PATH value to inspect.
-    /// - `cargo_home: Option<&OsStr>` - Cargo installation root.
-    /// - `home: Option<&OsStr>` - User home used for the default `.cargo` root.
+    /// - `Option<&OsStr>` - Explicit executable override.
+    /// - `Option<&OsStr>` - Process PATH value to inspect.
+    /// - `Option<&OsStr>` - Cargo installation root.
+    /// - `Option<&OsStr>` - User home used for the default `.cargo` root.
     ///
     /// # Returns
     ///
@@ -162,7 +210,7 @@ impl EuvPlaygroundService {
     ///
     /// # Arguments
     ///
-    /// - `mut child: Child` - The spawned child whose
+    /// - `Child` - The spawned child whose
     ///   stdout/stderr have already been taken into `Option`s.
     ///
     /// # Returns
@@ -210,8 +258,8 @@ impl EuvPlaygroundService {
     ///
     /// # Arguments
     ///
-    /// - `code: &str` - The user-submitted Rust source.
-    /// - `project_id: i64` - The owning project id; the build output
+    /// - `&str` - The user-submitted Rust source.
+    /// - `i64` - The owning project id; the build output
     ///   directory is keyed off its encoded form.
     ///
     /// # Returns
@@ -387,7 +435,7 @@ impl EuvPlaygroundService {
     ///
     /// # Arguments
     ///
-    /// - `input: &str` - The user-supplied raw name (may be empty).
+    /// - `&str` - The user-supplied raw name (may be empty).
     ///
     /// # Returns
     ///
@@ -481,7 +529,7 @@ impl EuvPlaygroundService {
     ///
     /// # Arguments
     ///
-    /// - `project_dir: &Path` - The project directory.
+    /// - `&Path` - The project directory.
     ///
     /// # Returns
     ///
@@ -497,9 +545,9 @@ impl EuvPlaygroundService {
     ///
     /// # Arguments
     ///
-    /// - `project_dir: &Path` - The project directory.
-    /// - `name: &str` - The normalized project name.
-    /// - `code: &str` - The Rust source code.
+    /// - `&Path` - The project directory.
+    /// - `&str` - The normalized project name.
+    /// - `&str` - The Rust source code.
     ///
     /// # Returns
     ///
@@ -533,8 +581,8 @@ impl EuvPlaygroundService {
     ///
     /// # Arguments
     ///
-    /// - `user_id: i32` - The owning user.
-    /// - `project_id: i64` - The project id (will be encoded).
+    /// - `i32` - The owning user.
+    /// - `i64` - The project id (will be encoded).
     ///
     /// # Returns
     ///
@@ -549,7 +597,7 @@ impl EuvPlaygroundService {
     ///
     /// # Arguments
     ///
-    /// - `user_id: i32` - The owning user (will be encoded).
+    /// - `i32` - The owning user (will be encoded).
     ///
     /// # Returns
     ///
@@ -566,7 +614,7 @@ impl EuvPlaygroundService {
     ///
     /// # Arguments
     ///
-    /// - `project_dir: &Path` - The project directory.
+    /// - `&Path` - The project directory.
     ///
     /// # Returns
     ///
@@ -592,9 +640,9 @@ impl EuvPlaygroundService {
     ///
     /// # Arguments
     ///
-    /// - `project_dir: &Path` - The project directory.
-    /// - `name: &str` - The normalized name.
-    /// - `updated_at_ms: i64` - The unix-epoch-ms timestamp.
+    /// - `&Path` - The project directory.
+    /// - `&str` - The normalized name.
+    /// - `i64` - The unix-epoch-ms timestamp.
     #[instrument_trace]
     pub fn write_metadata(project_dir: &Path, name: &str, updated_at_ms: i64) {
         let json: String = format!(
@@ -633,5 +681,326 @@ impl EuvPlaygroundService {
             return ts + 1_000_000_000;
         }
         next
+    }
+
+    /// Allocates the next monotonic [`BuildJobId`].
+    ///
+    /// Job ids are server-lifetime unique so the frontend can poll
+    /// `/api/euv/playground/run/status/{job_id}` without ambiguity even
+    /// after the user has started a second build.
+    ///
+    /// # Returns
+    ///
+    /// - `BuildJobId`: The freshly reserved id.
+    #[instrument_trace]
+    pub fn next_job_id() -> BuildJobId {
+        NEXT_BUILD_JOB_ID.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// Creates a new `pending` row in [`BUILD_JOB_REGISTRY`] for the
+    /// supplied `(user_id, project_id)` pair and returns the freshly
+    /// assigned job id.
+    ///
+    /// # Arguments
+    ///
+    /// - `i32` - The owning user id.
+    /// - `i64` - The owning project id.
+    ///
+    /// # Returns
+    ///
+    /// - `BuildJobId`: The new job id; the inserted row starts in
+    ///   [`build_status::PENDING`].
+    #[instrument_trace]
+    pub async fn register_pending_job(user_id: i32, project_id: i64) -> BuildJobId {
+        let job_id: BuildJobId = Self::next_job_id();
+        let ts: i64 = Self::now_ms();
+        let job: BuildJob = BuildJob {
+            job_id,
+            user_id,
+            project_id,
+            status: build_status::PENDING.to_string(),
+            build_url: String::new(),
+            stderr: String::new(),
+            created_at_ms: ts,
+            updated_at_ms: ts,
+        };
+        let job_arc: BuildJobSlot = std::sync::Arc::new(tokio::sync::RwLock::new(job));
+        {
+            let mut map: tokio::sync::RwLockWriteGuard<'_, BuildJobMap> =
+                BUILD_JOB_REGISTRY.write().await;
+            map.insert(job_id, job_arc);
+        }
+        job_id
+    }
+
+    /// Publishes a build task message onto the build topic.
+    ///
+    /// The wire payload is
+    /// `{job_id}{BUILD_TASK_SEPARATOR}{user_id}{BUILD_TASK_SEPARATOR}{project_id}{BUILD_TASK_SEPARATOR}{code}`
+    /// so the worker can reconstruct every input without any extra
+    /// round-trip to the controller.
+    ///
+    /// # Arguments
+    ///
+    /// - `BuildJobId` - The id returned by [`Self::register_pending_job`].
+    /// - `i32` - The owning user id.
+    /// - `i64` - The owning project id.
+    /// - `&str` - The user-submitted Rust source.
+    ///
+    /// # Returns
+    ///
+    /// - `Result<(), String>`: Ok on successful publish, or an error from
+    ///   the broker (typically a missing topic — only happens if the
+    ///   message-queue bootstrap has not yet run).
+    #[instrument_trace]
+    pub async fn publish_build_task(
+        job_id: BuildJobId,
+        user_id: i32,
+        project_id: i64,
+        code: &str,
+    ) -> Result<(), String> {
+        let broker: &MessageQueueBroker = get_message_queue_broker();
+        let payload: MessagePayload = format!(
+            "{job_id}{BUILD_TASK_SEPARATOR}{user_id}{BUILD_TASK_SEPARATOR}{project_id}{BUILD_TASK_SEPARATOR}{code}"
+        )
+        .into_bytes();
+        broker.publish(TOPIC_EUV_PLAYGROUND_BUILD, &payload).await
+    }
+
+    /// Looks up a build job by id, applying ownership authorization.
+    ///
+    /// # Arguments
+    ///
+    /// - `BuildJobId` - The job id from the URL.
+    /// - `i32` - The authenticated user from the cookie; a
+    ///   mismatch returns `None` so the controller can answer 404.
+    ///
+    /// # Returns
+    ///
+    /// - `Option<BuildJob>`: A clone of the row when it exists and the
+    ///   supplied `user_id` owns it, otherwise `None`.
+    #[instrument_trace]
+    pub async fn get_build_status(job_id: BuildJobId, user_id: i32) -> Option<BuildJob> {
+        let job_arc: BuildJobSlot = {
+            let map: tokio::sync::RwLockReadGuard<'_, BuildJobMap> =
+                BUILD_JOB_REGISTRY.read().await;
+            match map.get(&job_id) {
+                Some(j) => j.clone(),
+                None => return None,
+            }
+        };
+        let job: BuildJob = job_arc.read().await.clone();
+        if job.user_id != user_id {
+            return None;
+        }
+        Some(job)
+    }
+
+    /// Transitions a `pending` job into [`build_status::RUNNING`].
+    ///
+    /// Called by the build worker before spawning `wasm-pack`. No-op when
+    /// the job id is not present (the controller may have purged it).
+    ///
+    /// # Arguments
+    ///
+    /// - `BuildJobId` - The job id.
+    #[instrument_trace]
+    pub async fn mark_job_running(job_id: BuildJobId) {
+        let job_arc: Option<BuildJobSlot> = {
+            let map: tokio::sync::RwLockReadGuard<'_, BuildJobMap> =
+                BUILD_JOB_REGISTRY.read().await;
+            map.get(&job_id).cloned()
+        };
+        let Some(job_arc) = job_arc else {
+            return;
+        };
+        let mut job: tokio::sync::RwLockWriteGuard<'_, BuildJob> = job_arc.write().await;
+        job.status = build_status::RUNNING.to_string();
+        job.updated_at_ms = Self::now_ms();
+    }
+
+    /// Transitions a job into [`build_status::SUCCESS`] and stores the
+    /// `build_url` the frontend should load.
+    ///
+    /// # Arguments
+    ///
+    /// - `BuildJobId` - The job id.
+    /// - `&str` - The absolute path the frontend should load.
+    #[instrument_trace]
+    pub async fn mark_job_success(job_id: BuildJobId, build_url: &str) {
+        let job_arc: Option<BuildJobSlot> = {
+            let map: tokio::sync::RwLockReadGuard<'_, BuildJobMap> =
+                BUILD_JOB_REGISTRY.read().await;
+            map.get(&job_id).cloned()
+        };
+        let Some(job_arc) = job_arc else {
+            return;
+        };
+        let mut job: tokio::sync::RwLockWriteGuard<'_, BuildJob> = job_arc.write().await;
+        job.status = build_status::SUCCESS.to_string();
+        job.build_url = build_url.to_string();
+        job.stderr = String::new();
+        job.updated_at_ms = Self::now_ms();
+    }
+
+    /// Transitions a job into [`build_status::FAILED`] and stores the
+    /// captured stderr / error message.
+    ///
+    /// # Arguments
+    ///
+    /// - `BuildJobId` - The job id.
+    /// - `&str` - Human-readable failure detail.
+    #[instrument_trace]
+    pub async fn mark_job_failed(job_id: BuildJobId, stderr: &str) {
+        let job_arc: Option<BuildJobSlot> = {
+            let map: tokio::sync::RwLockReadGuard<'_, BuildJobMap> =
+                BUILD_JOB_REGISTRY.read().await;
+            map.get(&job_id).cloned()
+        };
+        let Some(job_arc) = job_arc else {
+            return;
+        };
+        let mut job: tokio::sync::RwLockWriteGuard<'_, BuildJob> = job_arc.write().await;
+        job.status = build_status::FAILED.to_string();
+        job.stderr = stderr.to_string();
+        job.updated_at_ms = Self::now_ms();
+    }
+
+    /// Build-worker entry point.
+    ///
+    /// Parses the wire payload published by [`Self::publish_build_task`],
+    /// runs `wasm-pack build`, and writes the final status back into the
+    /// registry. Spawned by
+    /// `bootstrap::application::euv_playground` for every received
+    /// payload so the listener loop itself never blocks.
+    ///
+    /// # Arguments
+    ///
+    /// - `MessagePayload` - The raw bytes from the topic.
+    #[instrument_trace]
+    pub async fn run_build_for_job(payload: MessagePayload) {
+        let sep_byte: u8 = BUILD_TASK_SEPARATOR.as_bytes()[0];
+        let mut segments: Vec<&[u8]> = Vec::with_capacity(4);
+        let mut start: usize = 0;
+        for (idx, byte) in payload.iter().enumerate() {
+            if *byte == sep_byte && segments.len() < 3 {
+                segments.push(&payload[start..idx]);
+                start = idx + 1;
+            }
+        }
+        segments.push(&payload[start..]);
+        let job_id_str: &[u8] = match segments.first() {
+            Some(s) => s,
+            None => {
+                error!("Invalid build task payload: missing job id");
+                return;
+            }
+        };
+        let user_id_str: &[u8] = match segments.get(1) {
+            Some(s) => s,
+            None => {
+                error!("Invalid build task payload: missing user id");
+                return;
+            }
+        };
+        let project_id_str: &[u8] = match segments.get(2) {
+            Some(s) => s,
+            None => {
+                error!("Invalid build task payload: missing project id");
+                return;
+            }
+        };
+        let code_bytes: &[u8] = match segments.get(3) {
+            Some(s) => s,
+            None => {
+                error!("Invalid build task payload: missing code");
+                return;
+            }
+        };
+        let job_id: BuildJobId = match std::str::from_utf8(job_id_str)
+            .ok()
+            .and_then(|s: &str| s.parse::<BuildJobId>().ok())
+        {
+            Some(v) => v,
+            None => {
+                error!("Invalid build task payload: job id is not a u64");
+                return;
+            }
+        };
+        let user_id: i32 = match std::str::from_utf8(user_id_str)
+            .ok()
+            .and_then(|s: &str| s.parse::<i32>().ok())
+        {
+            Some(v) => v,
+            None => {
+                error!("Invalid build task payload: user id is not i32");
+                return;
+            }
+        };
+        let project_id: i64 = match std::str::from_utf8(project_id_str)
+            .ok()
+            .and_then(|s: &str| s.parse::<i64>().ok())
+        {
+            Some(v) => v,
+            None => {
+                error!("Invalid build task payload: project id is not i64");
+                return;
+            }
+        };
+        let code: String = match String::from_utf8(code_bytes.to_vec()) {
+            Ok(s) => s,
+            Err(error) => {
+                error!("Invalid build task payload: code is not UTF-8 {error}");
+                Self::mark_job_failed(job_id, &format!("code is not UTF-8: {error}")).await;
+                return;
+            }
+        };
+        Self::mark_job_running(job_id).await;
+        match Self::build_wasm_pack_output(&code, project_id).await {
+            Ok(_target_dir) => {
+                let build_url: String = format!(
+                    "/static/euv-playground/tmp/{}/index.html",
+                    Self::encode_id(project_id),
+                );
+                Self::mark_job_success(job_id, &build_url).await;
+                info!(
+                    "Euv playground build job {job_id} succeeded for user {user_id} project {project_id}"
+                );
+            }
+            Err(stderr) => {
+                Self::mark_job_failed(job_id, &stderr).await;
+                warn!(
+                    "Euv playground build job {job_id} failed for user {user_id} project {project_id}"
+                );
+            }
+        }
+    }
+
+    /// Purges finished jobs whose `updated_at_ms` is older than
+    /// [`BUILD_JOB_TTL_MS`] from [`BUILD_JOB_REGISTRY`].
+    ///
+    /// Spawned by
+    /// `bootstrap::application::euv_playground` on a fixed cadence so
+    /// abandoned clients cannot grow the registry without bound.
+    #[instrument_trace]
+    pub async fn purge_expired_jobs() {
+        let now: i64 = Self::now_ms();
+        let mut map: tokio::sync::RwLockWriteGuard<'_, BuildJobMap> =
+            BUILD_JOB_REGISTRY.write().await;
+        let before: usize = map.len();
+        map.retain(|_, slot: &mut BuildJobSlot| {
+            let snapshot: BuildJob = match slot.try_read() {
+                Ok(g) => g.clone(),
+                Err(_) => return true,
+            };
+            if snapshot.status != build_status::SUCCESS && snapshot.status != build_status::FAILED {
+                return true;
+            }
+            now.saturating_sub(snapshot.updated_at_ms) < BUILD_JOB_TTL_MS
+        });
+        let removed: usize = before.saturating_sub(map.len());
+        if removed > 0 {
+            info!("Purged {removed} expired euv playground build job(s)");
+        }
     }
 }

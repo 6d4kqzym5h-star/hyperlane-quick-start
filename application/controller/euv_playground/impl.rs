@@ -543,40 +543,115 @@ impl ServerHook for EuvPlaygroundRunRoute {
             ctx.get_mut_response().set_body(resp.to_json_bytes());
             return Status::Continue;
         }
-        match EuvPlaygroundService::build_wasm_pack_output(&code, project_id).await {
-            Ok(_target_dir) => {
-                // `project_id` here is the raw i64 — the on-disk path uses
-                // the encoded form (see `build_wasm_pack_output`), so the
-                // URL the frontend loads must match.
-                let build_url: String = format!(
-                    "/static/euv-playground/tmp/{}/index.html",
-                    EuvPlaygroundService::encode_id(project_id),
-                );
+        let job_id: BuildJobId =
+            EuvPlaygroundService::register_pending_job(user_id, project_id).await;
+        match EuvPlaygroundService::publish_build_task(job_id, user_id, project_id, &code).await {
+            Ok(()) => {
                 let mut payload: EuvPlaygroundRunResponse = EuvPlaygroundRunResponse::default();
                 payload
                     .set_ok(true)
+                    .set_job_id(EuvPlaygroundService::encode_job_id(job_id))
+                    .set_status(build_status::PENDING.to_string())
+                    .set_message(String::new())
                     .set_html(String::new())
                     .set_js(String::new())
                     .set_wasm(String::new())
                     .set_stderr(String::new())
-                    .set_build_url(build_url);
+                    .set_build_url(String::new());
                 let resp: ApiResponse<EuvPlaygroundRunResponse> =
                     ApiResponse::new(ApiResponseStatus::Success, payload);
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
             }
-            Err(stderr) => {
-                let mut payload = EuvPlaygroundRunResponse::default();
+            Err(error) => {
+                EuvPlaygroundService::mark_job_failed(job_id, &error).await;
+                let mut payload: EuvPlaygroundRunResponse = EuvPlaygroundRunResponse::default();
                 payload
                     .set_ok(false)
+                    .set_job_id(EuvPlaygroundService::encode_job_id(job_id))
+                    .set_status(build_status::FAILED.to_string())
+                    .set_message(error.clone())
                     .set_html(String::new())
                     .set_js(String::new())
                     .set_wasm(String::new())
-                    .set_stderr(stderr);
+                    .set_stderr(error)
+                    .set_build_url(String::new());
                 let resp: ApiResponse<EuvPlaygroundRunResponse> =
                     ApiResponse::new(ApiResponseStatus::Success, payload);
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
             }
         }
+        Status::Continue
+    }
+}
+
+/// Build status — GET /api/euv/playground/run/status/{id}
+///
+/// Returns the current state of a previously-enqueued build job. The
+/// frontend polls this endpoint until `status` becomes `success` or
+/// `failed`; the controller answers 404 when the job id is unknown or
+/// belongs to a different user.
+impl ServerHook for EuvPlaygroundBuildStatusRoute {
+    #[instrument_trace]
+    async fn new(_: &mut Stream, _: &mut Context) -> Self {
+        Self
+    }
+
+    #[prologue_macros(
+        methods(get),
+        try_get_route_param(ID_KEY => id_opt),
+        response_header(CONTENT_TYPE => APPLICATION_JSON)
+    )]
+    #[instrument_trace]
+    async fn handle(self, _stream: &mut Stream, ctx: &mut Context) -> Status {
+        let Some(user_id) = EuvPlaygroundHelpers::require_user(ctx) else {
+            return Status::Continue;
+        };
+        let id_str: String = match id_opt {
+            Some(s) => s,
+            None => {
+                let resp: ApiResponse<String> = ApiResponse::new(
+                    ApiResponseStatus::InvalidRequest,
+                    String::from("missing job id"),
+                );
+                ctx.get_mut_response().set_body(resp.to_json_bytes());
+                return Status::Continue;
+            }
+        };
+        let job_id: BuildJobId = match EuvPlaygroundService::decode_job_id(&id_str) {
+            Ok(v) => v,
+            Err(_) => {
+                let resp: ApiResponse<String> = ApiResponse::new(
+                    ApiResponseStatus::InvalidRequest,
+                    String::from("job id is not valid"),
+                );
+                ctx.get_mut_response().set_body(resp.to_json_bytes());
+                return Status::Continue;
+            }
+        };
+        let job = match EuvPlaygroundService::get_build_status(job_id, user_id).await {
+            Some(j) => j,
+            None => {
+                let resp: ApiResponse<String> = ApiResponse::new(
+                    ApiResponseStatus::ResourceNotFound,
+                    String::from("job not found"),
+                );
+                ctx.get_mut_response().set_body(resp.to_json_bytes());
+                return Status::Continue;
+            }
+        };
+        let mut payload: EuvPlaygroundBuildStatusResponse =
+            EuvPlaygroundBuildStatusResponse::default();
+        payload
+            .set_job_id(EuvPlaygroundService::encode_job_id(*job.get_job_id()))
+            .set_project_id(EuvPlaygroundService::encode_id(*job.get_project_id()))
+            .set_status(job.get_status().clone())
+            .set_build_url(job.get_build_url().clone())
+            .set_stderr(job.get_stderr().clone())
+            .set_created_at_ms(*job.get_created_at_ms())
+            .set_updated_at_ms(*job.get_updated_at_ms());
+        let resp: ApiResponse<EuvPlaygroundBuildStatusResponse> =
+            ApiResponse::new(ApiResponseStatus::Success, payload);
+        ctx.get_mut_response().set_body(resp.to_json_bytes());
         Status::Continue
     }
 }

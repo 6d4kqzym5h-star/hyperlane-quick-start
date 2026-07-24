@@ -3,7 +3,8 @@
 use {
     hyperlane_bootstrap::{
         application::{
-            cicd::*, db::*, env::*, github_pages::*, logger::*, message_queue::*, monitor::*,
+            cicd::*, db::*, env::*, euv_playground::*, github_pages::*, logger::*,
+            message_queue::*, monitor::*,
         },
         common::*,
         framework::{runtime::*, server::*},
@@ -28,6 +29,7 @@ fn main() {
         MessageQueueBootstrap::init().await;
         CicdBootstrap::init().await;
         GithubPagesBootstrap::init().await;
+        EuvPlaygroundBootstrap::init().await;
         MonitorBootstrap::init().await;
         ProcessPlugin::create(env_config.get_server_pid_file_path(), || async {
             ServerBootstrap::init().await;

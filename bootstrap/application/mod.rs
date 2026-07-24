@@ -1,6 +1,7 @@
 pub mod cicd;
 pub mod db;
 pub mod env;
+pub mod euv_playground;
 pub mod github_pages;
 pub mod logger;
 pub mod message_queue;

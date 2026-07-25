@@ -95,7 +95,7 @@ impl EuvPlaygroundService {
     #[instrument_trace]
     pub fn decode_job_id(encoded: &str) -> Result<BuildJobId, String> {
         let decoded: String = Decode::execute(CHARSETS, encoded)
-            .map(|s: String| s)
+            .map(|text: String| text)
             .unwrap_or_else(|_| encoded.to_string());
         decoded
             .parse::<BuildJobId>()
@@ -113,7 +113,7 @@ impl EuvPlaygroundService {
     pub fn timestamp_suffix() -> u64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d: Duration| d.as_secs())
+            .map(|duration: Duration| duration.as_secs())
             .unwrap_or(0)
     }
 
@@ -127,7 +127,7 @@ impl EuvPlaygroundService {
     pub fn now_ms() -> i64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d: Duration| d.as_millis() as i64)
+            .map(|duration: Duration| duration.as_millis() as i64)
             .unwrap_or(0)
     }
 
@@ -224,15 +224,15 @@ impl EuvPlaygroundService {
         let stderr: Option<ChildStderr> = child.stderr.take();
         let stdout_task = async move {
             let mut buf: Vec<u8> = Vec::new();
-            if let Some(mut s) = stdout {
-                let _: Result<usize, Error> = s.read_to_end(&mut buf).await;
+            if let Some(mut stdout_pipe) = stdout {
+                let _: Result<usize, Error> = stdout_pipe.read_to_end(&mut buf).await;
             }
             buf
         };
         let stderr_task = async move {
             let mut buf: Vec<u8> = Vec::new();
-            if let Some(mut s) = stderr {
-                let _: Result<usize, Error> = s.read_to_end(&mut buf).await;
+            if let Some(mut stderr_pipe) = stderr {
+                let _: Result<usize, Error> = stderr_pipe.read_to_end(&mut buf).await;
             }
             buf
         };
@@ -272,41 +272,53 @@ impl EuvPlaygroundService {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let counter: u64 = COUNTER.fetch_add(1, Ordering::Relaxed);
         let dir_name: String = format!(
-            "{}{}-{}{}",
-            EUV_PLAYGROUND_BUILD_DIR_PREFIX,
+            "{EUV_PLAYGROUND_BUILD_DIR_PREFIX}{}-{counter}{}",
             id(),
-            counter,
             Self::timestamp_suffix()
         );
         let dir_path: PathBuf = temp_dir().join(&dir_name);
-        let src_dir: PathBuf = dir_path.join("src");
-        let www_dir: PathBuf = dir_path.join("www");
-        create_dir_all(&src_dir).map_err(|e: std::io::Error| {
-            format!("Failed to create src dir {}: {e}", src_dir.display())
+        let src_dir: PathBuf = dir_path.join(EUV_PLAYGROUND_SRC_DIR);
+        let www_dir: PathBuf = dir_path.join(EUV_PLAYGROUND_WWW_DIR);
+        create_dir_all(&src_dir).map_err(|io_err: std::io::Error| {
+            format!("{ERROR_CREATE_SRC_DIR} {}: {io_err}", src_dir.display())
         })?;
-        create_dir_all(&www_dir).map_err(|e: std::io::Error| {
-            format!("Failed to create www dir {}: {e}", www_dir.display())
+        create_dir_all(&www_dir).map_err(|io_err: std::io::Error| {
+            format!("{ERROR_CREATE_WWW_DIR} {}: {io_err}", www_dir.display())
         })?;
-        let cargo_toml_path: PathBuf = dir_path.join("Cargo.toml");
-        let lib_rs_path: PathBuf = src_dir.join("lib.rs");
-        let index_html_path: PathBuf = www_dir.join("index.html");
+        let cargo_config_dir: PathBuf = dir_path.join(EUV_PLAYGROUND_BUILD_CARGO_DIR);
+        create_dir_all(&cargo_config_dir).map_err(|io_err: std::io::Error| {
+            format!(
+                "{ERROR_CREATE_CARGO_DIR} {}: {io_err}",
+                cargo_config_dir.display()
+            )
+        })?;
+        let cargo_toml_path: PathBuf = dir_path.join(EUV_PLAYGROUND_BUILD_CARGO_TOML_FILE);
+        let cargo_config_path: PathBuf =
+            cargo_config_dir.join(EUV_PLAYGROUND_BUILD_CARGO_CONFIG_FILE);
+        let lib_rs_path: PathBuf = src_dir.join(EUV_PLAYGROUND_BUILD_LIB_RS_FILE);
+        let index_html_path: PathBuf = www_dir.join(EUV_PLAYGROUND_BUILD_INDEX_HTML_FILE);
         write(&cargo_toml_path, EUV_PLAYGROUND_BUILD_CARGO_TOML)
-            .map_err(|e: std::io::Error| format!("Failed to write Cargo.toml: {e}"))?;
+            .map_err(|io_err: std::io::Error| format!("{ERROR_WRITE_CARGO_TOML} {io_err}"))?;
+        write(&cargo_config_path, EUV_PLAYGROUND_BUILD_CARGO_CONFIG)
+            .map_err(|io_err: std::io::Error| format!("{ERROR_WRITE_CARGO_CONFIG} {io_err}"))?;
         write(&lib_rs_path, code)
-            .map_err(|e: std::io::Error| format!("Failed to write src/lib.rs: {e}"))?;
+            .map_err(|io_err: std::io::Error| format!("{ERROR_WRITE_LIB_RS} {io_err}"))?;
         write(&index_html_path, EUV_PLAYGROUND_BUILD_INDEX_HTML)
-            .map_err(|e: std::io::Error| format!("Failed to write www/index.html: {e}"))?;
+            .map_err(|io_err: std::io::Error| format!("{ERROR_WRITE_INDEX_HTML} {io_err}"))?;
         let wasm_pack_binary: PathBuf = Self::resolve_wasm_pack_binary();
         let wasm_pack_display: String = wasm_pack_binary.display().to_string();
         let mut cmd: Command = Command::new(&wasm_pack_binary);
         cmd.current_dir(&dir_path)
-            .arg("build")
-            .arg("--target")
-            .arg("web")
-            .arg("--dev")
-            .arg("--out-dir")
-            .arg("www/pkg")
-            .env("CARGO_TERM_COLOR", "never")
+            .arg(WASM_PACK_ARG_BUILD)
+            .arg(WASM_PACK_ARG_TARGET)
+            .arg(WASM_PACK_TARGET_WEB)
+            .arg(WASM_PACK_ARG_DEV)
+            .arg(WASM_PACK_ARG_OUT_DIR)
+            .arg(WASM_PACK_OUT_DIR_WWW_PKG)
+            .env(
+                WASM_PACK_ENV_CARGO_TERM_COLOR,
+                WASM_PACK_CARGO_TERM_COLOR_NEVER,
+            )
             .env(
                 "CARGO_TARGET_DIR",
                 EUV_PLAYGROUND_SHARED_TARGET_DIR.as_os_str(),
@@ -314,11 +326,11 @@ impl EuvPlaygroundService {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         let child = match cmd.spawn() {
-            Ok(c) => c,
-            Err(e) => {
+            Ok(child) => child,
+            Err(io_err) => {
                 let _: Result<(), Error> = remove_dir_all(&dir_path);
                 return Err(format!(
-                    "Failed to spawn wasm-pack at {wasm_pack_display}. Install it with `cargo install wasm-pack`, add Cargo's bin directory to PATH, or set {EUV_PLAYGROUND_WASM_PACK_ENV}: {e}"
+                    "{ERROR_WASM_PACK_SPAWN_PREFIX} {wasm_pack_display}{ERROR_WASM_PACK_SPAWN_MIDDLE} {EUV_PLAYGROUND_WASM_PACK_ENV}{ERROR_WASM_PACK_SPAWN_TAIL} {io_err}"
                 ));
             }
         };
@@ -328,15 +340,15 @@ impl EuvPlaygroundService {
         )
         .await
         {
-            Ok(Ok(o)) => o,
-            Ok(Err(e)) => {
+            Ok(Ok(output)) => output,
+            Ok(Err(io_err)) => {
                 let _: Result<(), Error> = remove_dir_all(&dir_path);
-                return Err(format!("wasm-pack wait failed: {e}"));
+                return Err(format!("{ERROR_WASM_PACK_WAIT}: {io_err}"));
             }
             Err(_) => {
                 let _: Result<(), Error> = remove_dir_all(&dir_path);
                 return Err(format!(
-                    "wasm-pack timed out after {EUV_PLAYGROUND_BUILD_TIMEOUT_SECS}s"
+                    "{ERROR_WASM_PACK_TIMEOUT} {EUV_PLAYGROUND_BUILD_TIMEOUT_SECS}s"
                 ));
             }
         };
@@ -356,58 +368,59 @@ impl EuvPlaygroundService {
         }
         let target_dir: PathBuf =
             PathBuf::from(EUV_PLAYGROUND_BUILDS_DIR).join(Self::encode_id(project_id));
-        let target_tmp: PathBuf = PathBuf::from(EUV_PLAYGROUND_BUILDS_DIR).join(format!(
-            "{}.{}.tmp",
-            Self::encode_id(project_id),
-            counter
-        ));
-        if let Err(e) = create_dir_all(PathBuf::from(EUV_PLAYGROUND_BUILDS_DIR)) {
+        let target_tmp: PathBuf = PathBuf::from(EUV_PLAYGROUND_BUILDS_DIR)
+            .join(format!("{}.{counter}.tmp", Self::encode_id(project_id),));
+        if let Err(io_err) = create_dir_all(PathBuf::from(EUV_PLAYGROUND_BUILDS_DIR)) {
             let _: Result<(), Error> = remove_dir_all(&dir_path);
             return Err(format!(
-                "Failed to create builds dir {}: {e}",
-                EUV_PLAYGROUND_BUILDS_DIR
+                "{ERROR_CREATE_BUILDS_DIR} {EUV_PLAYGROUND_BUILDS_DIR}: {io_err}"
             ));
         }
-        if let Err(e) = create_dir_all(&target_tmp) {
+        if let Err(io_err) = create_dir_all(&target_tmp) {
             let _: Result<(), Error> = remove_dir_all(&dir_path);
             return Err(format!(
-                "Failed to create build staging dir {}: {e}",
-                target_tmp.display()
+                "{ERROR_CREATE_BUILD_STAGING_DIR} {}: {io_err}",
+                target_tmp.display(),
             ));
         }
         fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
-            create_dir_all(dst)
-                .map_err(|e: std::io::Error| format!("mkdir {}: {e}", dst.display()))?;
-            for entry in read_dir(src)
-                .map_err(|e: std::io::Error| format!("readdir {}: {e}", src.display()))?
-            {
-                let entry: DirEntry = entry.map_err(|e: std::io::Error| e.to_string())?;
+            create_dir_all(dst).map_err(|io_err: std::io::Error| {
+                format!("{ERROR_MKDIR} {}: {io_err}", dst.display())
+            })?;
+            for entry in read_dir(src).map_err(|io_err: std::io::Error| {
+                format!("{ERROR_READDIR} {}: {io_err}", src.display())
+            })? {
+                let entry: DirEntry = entry.map_err(|io_err: std::io::Error| io_err.to_string())?;
                 let from: PathBuf = entry.path();
                 let to: PathBuf = dst.join(entry.file_name());
                 if from.is_dir() {
                     copy_dir_recursive(&from, &to)?;
                 } else {
-                    copy(&from, &to).map_err(|e: std::io::Error| {
-                        format!("copy {} -> {}: {e}", from.display(), to.display())
+                    copy(&from, &to).map_err(|io_err: std::io::Error| {
+                        format!(
+                            "{ERROR_COPY} {} -> {}: {io_err}",
+                            from.display(),
+                            to.display(),
+                        )
                     })?;
                 }
             }
             Ok(())
         }
-        if let Err(e) = copy_dir_recursive(&www_dir, &target_tmp) {
+        if let Err(io_err) = copy_dir_recursive(&www_dir, &target_tmp) {
             let _: Result<(), Error> = remove_dir_all(&dir_path);
             let _: Result<(), Error> = remove_dir_all(&target_tmp);
-            return Err(e);
+            return Err(io_err);
         }
         if target_dir.exists() {
             let _: Result<(), Error> = remove_dir_all(&target_dir);
         }
-        if let Err(e) = rename(&target_tmp, &target_dir) {
+        if let Err(io_err) = rename(&target_tmp, &target_dir) {
             let _: Result<(), Error> = remove_dir_all(&dir_path);
             let _: Result<(), Error> = remove_dir_all(&target_tmp);
             return Err(format!(
-                "Failed to publish build to {}: {e}",
-                target_dir.display()
+                "{ERROR_PUBLISH_BUILD} {}: {io_err}",
+                target_dir.display(),
             ));
         }
         let _: Result<(), Error> = remove_dir_all(&dir_path);
@@ -444,17 +457,17 @@ impl EuvPlaygroundService {
     pub fn normalize_name(input: &str) -> String {
         let cleaned: String = input
             .chars()
-            .map(|c: char| match c {
+            .map(|ch: char| match ch {
                 '\t' | '\n' | '\r' => ' ',
-                c if (c as u32) < 0x20 => ' ',
+                ch if (ch as u32) < 0x20 => ' ',
                 '/' | '\\' | '<' | '>' | '&' | '"' | '\'' => ' ',
-                c => c,
+                ch => ch,
             })
             .collect();
         let collapsed: String = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
         let trimmed: &str = collapsed.trim();
         let base: &str = if trimmed.is_empty() {
-            "Untitled"
+            UNTITLED_PROJECT_NAME
         } else {
             trimmed
         };
@@ -500,14 +513,11 @@ impl EuvPlaygroundService {
         excluded_project_dir: Option<&Path>,
     ) -> Result<bool, String> {
         let entries: ReadDir = read_dir(user_dir).map_err(|error: std::io::Error| {
-            format!(
-                "Failed to read project directory {}: {error}",
-                user_dir.display()
-            )
+            format!("{ERROR_READ_PROJECT_DIR} {}: {error}", user_dir.display(),)
         })?;
         for entry_result in entries {
             let entry: DirEntry = entry_result.map_err(|error: std::io::Error| {
-                format!("Failed to read project directory entry: {error}")
+                format!("{ERROR_READ_PROJECT_DIR_ENTRY} {error}")
             })?;
             let project_dir: PathBuf = entry.path();
             if !project_dir.is_dir()
@@ -537,7 +547,7 @@ impl EuvPlaygroundService {
     #[instrument_trace]
     pub fn read_code(project_dir: &Path) -> Result<String, String> {
         read_to_string(project_dir.join(EUV_PLAYGROUND_CODE_FILE))
-            .map_err(|e: std::io::Error| format!("Failed to read code: {e}"))
+            .map_err(|io_err: std::io::Error| format!("{ERROR_READ_CODE} {io_err}"))
     }
 
     /// Writes a project's `code.rs` and updates `metadata.json`'s
@@ -560,13 +570,13 @@ impl EuvPlaygroundService {
         }
         if create_dir_all(project_dir).is_err() {
             return Err(format!(
-                "Failed to create project dir {}",
+                "{ERROR_CREATE_PROJECT_DIR} {}",
                 project_dir.display()
             ));
         }
         if write(project_dir.join(EUV_PLAYGROUND_CODE_FILE), code).is_err() {
             return Err(format!(
-                "Failed to write code to {}",
+                "{ERROR_WRITE_CODE} {}",
                 project_dir.join(EUV_PLAYGROUND_CODE_FILE).display()
             ));
         }
@@ -604,10 +614,10 @@ impl EuvPlaygroundService {
     /// - `PathBuf`: The path to the user's playground dir.
     #[instrument_trace]
     pub fn user_dir(user_id: i32) -> PathBuf {
-        let p: PathBuf =
+        let path: PathBuf =
             PathBuf::from(EUV_PLAYGROUND_DATA_DIR).join(Self::encode_id(user_id as i64));
-        let _: Result<(), Error> = create_dir_all(&p);
-        p
+        let _: Result<(), Error> = create_dir_all(&path);
+        path
     }
 
     /// Reads `metadata.json` for a project.
@@ -623,15 +633,15 @@ impl EuvPlaygroundService {
     #[instrument_trace]
     pub fn read_metadata(project_dir: &Path) -> Option<(String, i64)> {
         let text: String = read_to_string(project_dir.join(EUV_PLAYGROUND_META_FILE)).ok()?;
-        let v: Value = from_str(&text).ok()?;
-        let name: String = v
-            .get("name")
-            .and_then(|x: &Value| x.as_str())
-            .unwrap_or("Untitled")
+        let json_value: Value = from_str(&text).ok()?;
+        let name: String = json_value
+            .get(METADATA_FIELD_NAME)
+            .and_then(|value: &Value| value.as_str())
+            .unwrap_or(UNTITLED_PROJECT_NAME)
             .to_string();
-        let updated_at_ms: i64 = v
-            .get("updated_at_ms")
-            .and_then(|x: &Value| x.as_i64())
+        let updated_at_ms: i64 = json_value
+            .get(METADATA_FIELD_UPDATED_AT_MS)
+            .and_then(|value: &Value| value.as_i64())
             .unwrap_or(0);
         Some((name, updated_at_ms))
     }
@@ -646,9 +656,8 @@ impl EuvPlaygroundService {
     #[instrument_trace]
     pub fn write_metadata(project_dir: &Path, name: &str, updated_at_ms: i64) {
         let json: String = format!(
-            r#"{{"name":{},"updated_at_ms":{}}}"#,
-            to_string(name).unwrap_or_else(|_| "\"Untitled\"".to_string()),
-            updated_at_ms
+            r#"{{"name":{},"updated_at_ms":{updated_at_ms}}}"#,
+            to_string(name).unwrap_or_else(|_| UNTITLED_PROJECT_NAME_JSON.to_string()),
         );
         let _: Result<(), Error> = write(project_dir.join(EUV_PLAYGROUND_META_FILE), json);
     }
@@ -670,13 +679,17 @@ impl EuvPlaygroundService {
     pub fn next_project_id(user_dir: &Path) -> i64 {
         let seq_path: PathBuf = user_dir.join(EUV_PLAYGROUND_SEQ_FILE);
         let next: i64 = match read_to_string(&seq_path) {
-            Ok(s) => s.trim().parse::<i64>().unwrap_or(0).saturating_add(1),
+            Ok(seq_text) => seq_text
+                .trim()
+                .parse::<i64>()
+                .unwrap_or(0)
+                .saturating_add(1),
             Err(_) => 1,
         };
         if let Err(_e) = write(&seq_path, next.to_string()) {
             let ts: i64 = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .map(|d: Duration| d.as_millis() as i64)
+                .map(|duration: Duration| duration.as_millis() as i64)
                 .unwrap_or(0);
             return ts + 1_000_000_000;
         }
@@ -785,7 +798,7 @@ impl EuvPlaygroundService {
             let map: tokio::sync::RwLockReadGuard<'_, BuildJobMap> =
                 BUILD_JOB_REGISTRY.read().await;
             match map.get(&job_id) {
-                Some(j) => j.clone(),
+                Some(job) => job.clone(),
                 None => return None,
             }
         };
@@ -889,89 +902,88 @@ impl EuvPlaygroundService {
             }
         }
         segments.push(&payload[start..]);
-        let job_id_str: &[u8] = match segments.first() {
-            Some(s) => s,
+        let job_id_bytes: &[u8] = match segments.first() {
+            Some(job_id_bytes) => job_id_bytes,
             None => {
-                error!("Invalid build task payload: missing job id");
+                error!("{}", ERROR_BUILD_TASK_MISSING_JOB_ID);
                 return;
             }
         };
-        let user_id_str: &[u8] = match segments.get(1) {
-            Some(s) => s,
+        let user_id_bytes: &[u8] = match segments.get(1) {
+            Some(user_id_bytes) => user_id_bytes,
             None => {
-                error!("Invalid build task payload: missing user id");
+                error!("{}", ERROR_BUILD_TASK_MISSING_USER_ID);
                 return;
             }
         };
-        let project_id_str: &[u8] = match segments.get(2) {
-            Some(s) => s,
+        let project_id_bytes: &[u8] = match segments.get(2) {
+            Some(project_id_bytes) => project_id_bytes,
             None => {
-                error!("Invalid build task payload: missing project id");
+                error!("{}", ERROR_BUILD_TASK_MISSING_PROJECT_ID);
                 return;
             }
         };
         let code_bytes: &[u8] = match segments.get(3) {
-            Some(s) => s,
+            Some(code_bytes) => code_bytes,
             None => {
-                error!("Invalid build task payload: missing code");
+                error!("{}", ERROR_BUILD_TASK_MISSING_CODE);
                 return;
             }
         };
-        let job_id: BuildJobId = match std::str::from_utf8(job_id_str)
+        let job_id: BuildJobId = match std::str::from_utf8(job_id_bytes)
             .ok()
-            .and_then(|s: &str| s.parse::<BuildJobId>().ok())
+            .and_then(|text: &str| text.parse::<BuildJobId>().ok())
         {
-            Some(v) => v,
+            Some(parsed) => parsed,
             None => {
-                error!("Invalid build task payload: job id is not a u64");
+                error!("{}", ERROR_BUILD_TASK_BAD_JOB_ID_TYPE);
                 return;
             }
         };
-        let user_id: i32 = match std::str::from_utf8(user_id_str)
+        let user_id: i32 = match std::str::from_utf8(user_id_bytes)
             .ok()
-            .and_then(|s: &str| s.parse::<i32>().ok())
+            .and_then(|text: &str| text.parse::<i32>().ok())
         {
-            Some(v) => v,
+            Some(parsed) => parsed,
             None => {
-                error!("Invalid build task payload: user id is not i32");
+                error!("{}", ERROR_BUILD_TASK_BAD_USER_ID_TYPE);
                 return;
             }
         };
-        let project_id: i64 = match std::str::from_utf8(project_id_str)
+        let project_id: i64 = match std::str::from_utf8(project_id_bytes)
             .ok()
-            .and_then(|s: &str| s.parse::<i64>().ok())
+            .and_then(|text: &str| text.parse::<i64>().ok())
         {
-            Some(v) => v,
+            Some(parsed) => parsed,
             None => {
-                error!("Invalid build task payload: project id is not i64");
+                error!("{}", ERROR_BUILD_TASK_BAD_PROJECT_ID_TYPE);
                 return;
             }
         };
         let code: String = match String::from_utf8(code_bytes.to_vec()) {
-            Ok(s) => s,
-            Err(error) => {
-                error!("Invalid build task payload: code is not UTF-8 {error}");
-                Self::mark_job_failed(job_id, &format!("code is not UTF-8: {error}")).await;
+            Ok(code) => code,
+            Err(utf8_err) => {
+                error!("{ERROR_BUILD_TASK_BAD_CODE_UTF8_LOG} {utf8_err}");
+                Self::mark_job_failed(
+                    job_id,
+                    &format!("{ERROR_BUILD_TASK_BAD_CODE_UTF8_REASON}: {utf8_err}"),
+                )
+                .await;
                 return;
             }
         };
         Self::mark_job_running(job_id).await;
         match Self::build_wasm_pack_output(&code, project_id).await {
             Ok(_target_dir) => {
-                let build_url: String = format!(
-                    "/static/euv-playground/tmp/{}/index.html",
-                    Self::encode_id(project_id),
-                );
+                let encoded_id: String = Self::encode_id(project_id);
+                let build_url: String =
+                    format!("/static/euv-playground/tmp/{encoded_id}/index.html");
                 Self::mark_job_success(job_id, &build_url).await;
-                info!(
-                    "Euv playground build job {job_id} succeeded for user {user_id} project {project_id}"
-                );
+                info!("{LOG_BUILD_JOB_SUCCEEDED} {job_id} {user_id} {project_id}");
             }
             Err(stderr) => {
                 Self::mark_job_failed(job_id, &stderr).await;
-                warn!(
-                    "Euv playground build job {job_id} failed for user {user_id} project {project_id}"
-                );
+                warn!("{LOG_BUILD_JOB_FAILED} {job_id} {user_id} {project_id}");
             }
         }
     }
@@ -990,7 +1002,7 @@ impl EuvPlaygroundService {
         let before: usize = map.len();
         map.retain(|_, slot: &mut BuildJobSlot| {
             let snapshot: BuildJob = match slot.try_read() {
-                Ok(g) => g.clone(),
+                Ok(job) => job.clone(),
                 Err(_) => return true,
             };
             if snapshot.status != build_status::SUCCESS && snapshot.status != build_status::FAILED {
@@ -1000,7 +1012,7 @@ impl EuvPlaygroundService {
         });
         let removed: usize = before.saturating_sub(map.len());
         if removed > 0 {
-            info!("Purged {removed} expired euv playground build job(s)");
+            info!("Purged {removed} {LOG_BUILD_JOB_PURGED}");
         }
     }
 }

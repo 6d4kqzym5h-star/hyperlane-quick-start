@@ -14,13 +14,13 @@ impl BootstrapAsyncInit for EuvPlaygroundBootstrap {
             .create_topic_with_capacity(TOPIC_EUV_PLAYGROUND_BUILD, BUILD_TOPIC_CAPACITY)
             .await
         {
-            error!("Failed to create topic '{TOPIC_EUV_PLAYGROUND_BUILD}' {error}");
+            error!("{ERROR_CREATE_TOPIC_PREFIX} '{TOPIC_EUV_PLAYGROUND_BUILD}' {error}");
         }
         if let Err(error) = broker
             .create_consumer_group(TOPIC_EUV_PLAYGROUND_BUILD, CONSUMER_GROUP_BUILD_WORKER)
             .await
         {
-            error!("Failed to create consumer group '{CONSUMER_GROUP_BUILD_WORKER}' {error}");
+            error!("{ERROR_CREATE_CONSUMER_GROUP_PREFIX} '{CONSUMER_GROUP_BUILD_WORKER}' {error}");
         }
         listen_consumer_group(
             TOPIC_EUV_PLAYGROUND_BUILD,

@@ -19,7 +19,7 @@ impl ServerHook for EuvPlaygroundProjectsListRoute {
         let dir: std::path::PathBuf = EuvPlaygroundService::user_dir(user_id);
         let mut items: Vec<EuvPlaygroundProjectListItem> = Vec::new();
         let entries: std::fs::ReadDir = match std::fs::read_dir(&dir) {
-            Ok(e) => e,
+            Ok(read_dir) => read_dir,
             Err(_) => {
                 let resp: ApiResponse<Vec<EuvPlaygroundProjectListItem>> =
                     ApiResponse::new(ApiResponseStatus::Success, items);
@@ -28,12 +28,15 @@ impl ServerHook for EuvPlaygroundProjectsListRoute {
             }
         };
         for entry in entries.flatten() {
-            let p: std::path::PathBuf = entry.path();
-            if !p.is_dir() {
+            let path: std::path::PathBuf = entry.path();
+            if !path.is_dir() {
                 continue;
             }
-            let id_str: &str = match p.file_name().and_then(|n: &std::ffi::OsStr| n.to_str()) {
-                Some(s) => s,
+            let id_str: &str = match path
+                .file_name()
+                .and_then(|os_name: &std::ffi::OsStr| os_name.to_str())
+            {
+                Some(file_name) => file_name,
                 None => continue,
             };
             // The on-disk directory name is the URL-encoded form of
@@ -42,13 +45,13 @@ impl ServerHook for EuvPlaygroundProjectsListRoute {
             // backward compatibility with the (legacy) un-encoded
             // layout.
             let id: i64 = match EuvPlaygroundService::decode_id(id_str) {
-                Ok(v) => v,
+                Ok(parsed) => parsed,
                 Err(_) => continue,
             };
-            let (name, updated_at_ms): (String, i64) = EuvPlaygroundService::read_metadata(&p)
-                .unwrap_or_else(|| ("Untitled".to_string(), 0));
-            let code_size: u64 = std::fs::metadata(p.join(EUV_PLAYGROUND_CODE_FILE))
-                .map(|m: std::fs::Metadata| m.len())
+            let (name, updated_at_ms): (String, i64) = EuvPlaygroundService::read_metadata(&path)
+                .unwrap_or_else(|| (CONTROLLER_UNTITLED_PROJECT_NAME.to_string(), 0));
+            let code_size: u64 = std::fs::metadata(path.join(EUV_PLAYGROUND_CODE_FILE))
+                .map(|metadata: std::fs::Metadata| metadata.len())
                 .unwrap_or(0);
             let mut item: EuvPlaygroundProjectListItem = EuvPlaygroundProjectListItem::default();
             item.set_id(EuvPlaygroundService::encode_id(id))
@@ -58,8 +61,8 @@ impl ServerHook for EuvPlaygroundProjectsListRoute {
             items.push(item);
         }
         items.sort_by(
-            |a: &EuvPlaygroundProjectListItem, b: &EuvPlaygroundProjectListItem| {
-                b.get_updated_at_ms().cmp(a.get_updated_at_ms())
+            |left: &EuvPlaygroundProjectListItem, right: &EuvPlaygroundProjectListItem| {
+                right.get_updated_at_ms().cmp(left.get_updated_at_ms())
             },
         );
         items.truncate(EUV_PLAYGROUND_MAX_LIST_ITEMS);
@@ -88,10 +91,10 @@ impl ServerHook for EuvPlaygroundProjectsCreateRoute {
             return Status::Continue;
         };
         let request: EuvPlaygroundProjectCreateRequest = match request_opt {
-            Ok(r) => r,
-            Err(e) => {
+            Ok(request) => request,
+            Err(err) => {
                 let resp: ApiResponse<String> =
-                    ApiResponse::new(ApiResponseStatus::InvalidRequest, e.to_string());
+                    ApiResponse::new(ApiResponseStatus::InvalidRequest, err.to_string());
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
                 return Status::Continue;
             }
@@ -100,7 +103,9 @@ impl ServerHook for EuvPlaygroundProjectsCreateRoute {
         let user_root: std::path::PathBuf = EuvPlaygroundService::user_dir(user_id);
         match EuvPlaygroundService::project_name_exists(&user_root, &name) {
             Ok(true) => {
-                let error: String = format!("Project name \"{name}\" already exists");
+                let error: String = format!(
+                    "{ERROR_PROJECT_NAME_TAKEN_PREFIX}{name}{ERROR_PROJECT_NAME_TAKEN_SUFFIX}"
+                );
                 let mut resp: ApiResponse<String> =
                     ApiResponse::new(ApiResponseStatus::Conflict, error.clone());
                 resp.set_message(error);
@@ -133,9 +138,9 @@ impl ServerHook for EuvPlaygroundProjectsCreateRoute {
                     ApiResponse::new(ApiResponseStatus::Success, payload);
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
             }
-            Err(e) => {
+            Err(err) => {
                 let resp: ApiResponse<String> =
-                    ApiResponse::new(ApiResponseStatus::BusinessLogicError, e);
+                    ApiResponse::new(ApiResponseStatus::BusinessLogicError, err);
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
             }
         }
@@ -161,11 +166,11 @@ impl ServerHook for EuvPlaygroundProjectsGetRoute {
             return Status::Continue;
         };
         let id_str: String = match id_opt {
-            Some(s) => s,
+            Some(id_str) => id_str,
             None => {
                 let resp: ApiResponse<String> = ApiResponse::new(
                     ApiResponseStatus::InvalidRequest,
-                    String::from("missing project id"),
+                    String::from(ERROR_MISSING_PROJECT_ID),
                 );
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
                 return Status::Continue;
@@ -176,11 +181,11 @@ impl ServerHook for EuvPlaygroundProjectsGetRoute {
         // numeric form before parsing). The same encoding convention
         // is used by the `auth` and `rss` services.
         let id: i64 = match EuvPlaygroundService::decode_id(&id_str) {
-            Ok(v) => v,
+            Ok(id) => id,
             Err(_) => {
                 let resp: ApiResponse<String> = ApiResponse::new(
                     ApiResponseStatus::InvalidRequest,
-                    String::from("project id is not a number"),
+                    String::from(ERROR_INVALID_PROJECT_ID),
                 );
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
                 return Status::Continue;
@@ -190,22 +195,27 @@ impl ServerHook for EuvPlaygroundProjectsGetRoute {
         if !pdir.exists() {
             let resp: ApiResponse<String> = ApiResponse::new(
                 ApiResponseStatus::ResourceNotFound,
-                String::from("project not found"),
+                String::from(ERROR_PROJECT_NOT_FOUND),
             );
             ctx.get_mut_response().set_body(resp.to_json_bytes());
             return Status::Continue;
         }
         let code: String = match EuvPlaygroundService::read_code(&pdir) {
-            Ok(c) => c,
-            Err(e) => {
+            Ok(code) => code,
+            Err(err) => {
                 let resp: ApiResponse<String> =
-                    ApiResponse::new(ApiResponseStatus::BusinessLogicError, e);
+                    ApiResponse::new(ApiResponseStatus::BusinessLogicError, err);
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
                 return Status::Continue;
             }
         };
-        let (name, updated_at_ms) = EuvPlaygroundService::read_metadata(&pdir)
-            .unwrap_or_else(|| ("Untitled".to_string(), EuvPlaygroundService::now_ms()));
+        let (name, updated_at_ms) =
+            EuvPlaygroundService::read_metadata(&pdir).unwrap_or_else(|| {
+                (
+                    CONTROLLER_UNTITLED_PROJECT_NAME.to_string(),
+                    EuvPlaygroundService::now_ms(),
+                )
+            });
         let mut payload: EuvPlaygroundProjectDetail = EuvPlaygroundProjectDetail::default();
         payload
             .set_id(EuvPlaygroundService::encode_id(id))
@@ -238,11 +248,11 @@ impl ServerHook for EuvPlaygroundProjectsSaveRoute {
             return Status::Continue;
         };
         let id_str: String = match id_opt {
-            Some(s) => s,
+            Some(id_str) => id_str,
             None => {
                 let resp: ApiResponse<String> = ApiResponse::new(
                     ApiResponseStatus::InvalidRequest,
-                    String::from("missing project id"),
+                    String::from(ERROR_MISSING_PROJECT_ID),
                 );
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
                 return Status::Continue;
@@ -253,21 +263,21 @@ impl ServerHook for EuvPlaygroundProjectsSaveRoute {
         // numeric form before parsing). The same encoding convention
         // is used by the `auth` and `rss` services.
         let id: i64 = match EuvPlaygroundService::decode_id(&id_str) {
-            Ok(v) => v,
+            Ok(id) => id,
             Err(_) => {
                 let resp: ApiResponse<String> = ApiResponse::new(
                     ApiResponseStatus::InvalidRequest,
-                    String::from("project id is not a number"),
+                    String::from(ERROR_INVALID_PROJECT_ID),
                 );
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
                 return Status::Continue;
             }
         };
         let request: EuvPlaygroundProjectSaveRequest = match request_opt {
-            Ok(r) => r,
-            Err(e) => {
+            Ok(request) => request,
+            Err(err) => {
                 let resp: ApiResponse<String> =
-                    ApiResponse::new(ApiResponseStatus::InvalidRequest, e.to_string());
+                    ApiResponse::new(ApiResponseStatus::InvalidRequest, err.to_string());
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
                 return Status::Continue;
             }
@@ -276,14 +286,19 @@ impl ServerHook for EuvPlaygroundProjectsSaveRoute {
         if !pdir.exists() {
             let resp: ApiResponse<String> = ApiResponse::new(
                 ApiResponseStatus::ResourceNotFound,
-                String::from("project not found"),
+                String::from(ERROR_PROJECT_NOT_FOUND),
             );
             ctx.get_mut_response().set_body(resp.to_json_bytes());
             return Status::Continue;
         }
         // Resolve the final name + code from existing state + overrides.
         let (cur_name, _cur_ts): (String, i64) = EuvPlaygroundService::read_metadata(&pdir)
-            .unwrap_or_else(|| ("Untitled".to_string(), EuvPlaygroundService::now_ms()));
+            .unwrap_or_else(|| {
+                (
+                    CONTROLLER_UNTITLED_PROJECT_NAME.to_string(),
+                    EuvPlaygroundService::now_ms(),
+                )
+            });
         let name_trim: String = request.get_name().trim().to_string();
         let new_name: String = if name_trim.is_empty() {
             cur_name
@@ -297,7 +312,9 @@ impl ServerHook for EuvPlaygroundProjectsSaveRoute {
             Some(&pdir),
         ) {
             Ok(true) => {
-                let error: String = format!("Project name \"{new_name}\" already exists");
+                let error: String = format!(
+                    "{ERROR_PROJECT_NAME_TAKEN_PREFIX}{new_name}{ERROR_PROJECT_NAME_TAKEN_SUFFIX}"
+                );
                 let mut resp: ApiResponse<String> =
                     ApiResponse::new(ApiResponseStatus::Conflict, error.clone());
                 resp.set_message(error);
@@ -316,30 +333,30 @@ impl ServerHook for EuvPlaygroundProjectsSaveRoute {
             }
         }
         let code_opt: Option<String> = match request.try_get_code() {
-            Some(c) if !c.is_empty() => Some(c.to_string()),
+            Some(code) if !code.is_empty() => Some(code.to_string()),
             _ => None,
         };
         let final_code: String = match code_opt {
-            Some(c) => {
-                if c.len() > EUV_PLAYGROUND_MAX_CODE_BYTES {
+            Some(code) => {
+                if code.len() > EUV_PLAYGROUND_MAX_CODE_BYTES {
                     let resp: ApiResponse<String> = ApiResponse::new(
                         ApiResponseStatus::InvalidRequest,
                         format!(
-                            "code exceeds {} bytes (got {})",
+                            "{ERROR_CODE_EXCEEDS_PREFIX}{} bytes (got {})",
                             EUV_PLAYGROUND_MAX_CODE_BYTES,
-                            c.len()
+                            code.len()
                         ),
                     );
                     ctx.get_mut_response().set_body(resp.to_json_bytes());
                     return Status::Continue;
                 }
-                c
+                code
             }
             None => match EuvPlaygroundService::read_code(&pdir) {
-                Ok(c) => c,
-                Err(e) => {
+                Ok(code) => code,
+                Err(err) => {
                     let resp: ApiResponse<String> =
-                        ApiResponse::new(ApiResponseStatus::BusinessLogicError, e);
+                        ApiResponse::new(ApiResponseStatus::BusinessLogicError, err);
                     ctx.get_mut_response().set_body(resp.to_json_bytes());
                     return Status::Continue;
                 }
@@ -357,9 +374,9 @@ impl ServerHook for EuvPlaygroundProjectsSaveRoute {
                     ApiResponse::new(ApiResponseStatus::Success, payload);
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
             }
-            Err(e) => {
+            Err(err) => {
                 let resp: ApiResponse<String> =
-                    ApiResponse::new(ApiResponseStatus::BusinessLogicError, e);
+                    ApiResponse::new(ApiResponseStatus::BusinessLogicError, err);
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
             }
         }
@@ -385,11 +402,11 @@ impl ServerHook for EuvPlaygroundProjectsDeleteRoute {
             return Status::Continue;
         };
         let id_str: String = match id_opt {
-            Some(s) => s,
+            Some(id_str) => id_str,
             None => {
                 let resp: ApiResponse<String> = ApiResponse::new(
                     ApiResponseStatus::InvalidRequest,
-                    String::from("missing project id"),
+                    String::from(ERROR_MISSING_PROJECT_ID),
                 );
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
                 return Status::Continue;
@@ -400,11 +417,11 @@ impl ServerHook for EuvPlaygroundProjectsDeleteRoute {
         // numeric form before parsing). The same encoding convention
         // is used by the `auth` and `rss` services.
         let id: i64 = match EuvPlaygroundService::decode_id(&id_str) {
-            Ok(v) => v,
+            Ok(id) => id,
             Err(_) => {
                 let resp: ApiResponse<String> = ApiResponse::new(
                     ApiResponseStatus::InvalidRequest,
-                    String::from("project id is not a number"),
+                    String::from(ERROR_INVALID_PROJECT_ID),
                 );
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
                 return Status::Continue;
@@ -414,13 +431,18 @@ impl ServerHook for EuvPlaygroundProjectsDeleteRoute {
         if !pdir.exists() {
             let resp: ApiResponse<String> = ApiResponse::new(
                 ApiResponseStatus::ResourceNotFound,
-                String::from("project not found"),
+                String::from(ERROR_PROJECT_NOT_FOUND),
             );
             ctx.get_mut_response().set_body(resp.to_json_bytes());
             return Status::Continue;
         }
-        let (name, _ts): (String, i64) = EuvPlaygroundService::read_metadata(&pdir)
-            .unwrap_or_else(|| ("Untitled".to_string(), EuvPlaygroundService::now_ms()));
+        let (name, _ts): (String, i64) =
+            EuvPlaygroundService::read_metadata(&pdir).unwrap_or_else(|| {
+                (
+                    CONTROLLER_UNTITLED_PROJECT_NAME.to_string(),
+                    EuvPlaygroundService::now_ms(),
+                )
+            });
         match std::fs::remove_dir_all(&pdir) {
             Ok(_) => {
                 let mut payload = EuvPlaygroundProjectMutationResponse::default();
@@ -433,10 +455,10 @@ impl ServerHook for EuvPlaygroundProjectsDeleteRoute {
                     ApiResponse::new(ApiResponseStatus::Success, payload);
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
             }
-            Err(e) => {
+            Err(io_err) => {
                 let resp: ApiResponse<String> = ApiResponse::new(
                     ApiResponseStatus::BusinessLogicError,
-                    format!("Failed to delete project: {e}"),
+                    format!("{ERROR_DELETE_PROJECT_FAILED} {io_err}"),
                 );
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
             }
@@ -492,10 +514,10 @@ impl ServerHook for EuvPlaygroundRunRoute {
             return Status::Continue;
         };
         let request: EuvPlaygroundRunRequest = match request_opt {
-            Ok(r) => r,
-            Err(e) => {
+            Ok(request) => request,
+            Err(err) => {
                 let resp: ApiResponse<String> =
-                    ApiResponse::new(ApiResponseStatus::InvalidRequest, e.to_string());
+                    ApiResponse::new(ApiResponseStatus::InvalidRequest, err.to_string());
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
                 return Status::Continue;
             }
@@ -513,7 +535,7 @@ impl ServerHook for EuvPlaygroundRunRoute {
         if !pdir.exists() {
             let resp: ApiResponse<String> = ApiResponse::new(
                 ApiResponseStatus::ResourceNotFound,
-                String::from("project not found"),
+                String::from(ERROR_PROJECT_NOT_FOUND),
             );
             ctx.get_mut_response().set_body(resp.to_json_bytes());
             return Status::Continue;
@@ -535,7 +557,7 @@ impl ServerHook for EuvPlaygroundRunRoute {
             let resp: ApiResponse<String> = ApiResponse::new(
                 ApiResponseStatus::InvalidRequest,
                 format!(
-                    "code exceeds {} bytes (got {})",
+                    "{ERROR_CODE_EXCEEDS_PREFIX}{} bytes (got {})",
                     EUV_PLAYGROUND_MAX_CODE_BYTES,
                     code.len()
                 ),
@@ -607,33 +629,33 @@ impl ServerHook for EuvPlaygroundBuildStatusRoute {
             return Status::Continue;
         };
         let id_str: String = match id_opt {
-            Some(s) => s,
+            Some(id_str) => id_str,
             None => {
                 let resp: ApiResponse<String> = ApiResponse::new(
                     ApiResponseStatus::InvalidRequest,
-                    String::from("missing job id"),
+                    String::from(ERROR_MISSING_JOB_ID),
                 );
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
                 return Status::Continue;
             }
         };
         let job_id: BuildJobId = match EuvPlaygroundService::decode_job_id(&id_str) {
-            Ok(v) => v,
+            Ok(parsed_job_id) => parsed_job_id,
             Err(_) => {
                 let resp: ApiResponse<String> = ApiResponse::new(
                     ApiResponseStatus::InvalidRequest,
-                    String::from("job id is not valid"),
+                    String::from(ERROR_INVALID_JOB_ID),
                 );
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
                 return Status::Continue;
             }
         };
         let job = match EuvPlaygroundService::get_build_status(job_id, user_id).await {
-            Some(j) => j,
+            Some(job) => job,
             None => {
                 let resp: ApiResponse<String> = ApiResponse::new(
                     ApiResponseStatus::ResourceNotFound,
-                    String::from("job not found"),
+                    String::from(ERROR_JOB_NOT_FOUND),
                 );
                 ctx.get_mut_response().set_body(resp.to_json_bytes());
                 return Status::Continue;

@@ -10,7 +10,6 @@ const ShortlinkApp = {
   init: function () {
     this.bindEvents();
     this.setupFormValidation();
-    console.log('Shortlink App initialized');
   },
 
   bindEvents: function () {
@@ -410,16 +409,4 @@ window.toast = Toast;
 
 document.addEventListener('DOMContentLoaded', function () {
   ShortlinkApp.init();
-
-  console.log('Shortlink Generator initialized successfully');
-  console.log('Available functions:', {
-    generate: 'Enter a URL and click Generate Shortlink',
-    copy: 'Click the copy button next to the generated link',
-    open: 'Click Open Link to test your shortlink in a new tab',
-    new: 'Click Create Another to generate a new shortlink',
-  });
-});
-
-window.addEventListener('beforeunload', function () {
-  console.log('Shortlink app cleanup');
 });

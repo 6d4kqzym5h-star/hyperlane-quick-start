@@ -1704,7 +1704,6 @@ jobs:
         });
 
         logEventSource.addEventListener('complete', (event) => {
-          console.log('SSE complete:', event.data);
           if (logEventSource) {
             logEventSource.close();
             logEventSource = null;
@@ -1718,10 +1717,6 @@ jobs:
             logEventSource = null;
           }
         };
-      }
-
-      function startLegacyPolling(runId) {
-        console.log('EventSource not supported, using legacy polling');
       }
 
       async function pollIncrementalDetail(runId) {

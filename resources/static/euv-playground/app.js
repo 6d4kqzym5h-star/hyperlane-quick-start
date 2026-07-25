@@ -848,21 +848,6 @@
         retryLoadCurrentProject();
       });
     }
-    ['pg-new', 'pg-run', 'pg-new-icon'].forEach(function (id) {
-      const el = $(id);
-      if (el) {
-        el.addEventListener('click', function () {
-          try {
-            console.log('[pg-debug]', id, 'click');
-          } catch (e) {}
-        });
-        el.addEventListener('hyperlane-click', function () {
-          try {
-            console.log('[pg-debug]', id, 'hyperlane-click');
-          } catch (e) {}
-        });
-      }
-    });
 
     const logoutBtn = $('pg-logout');
     if (logoutBtn) {

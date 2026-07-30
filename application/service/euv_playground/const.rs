@@ -172,7 +172,20 @@ wasm-bindgen = "*"
 console_error_panic_hook = "*"
 
 [package.metadata.wasm-pack.profile.dev]
-wasm-opt = false
+wasm-opt = [
+    "-Oz",
+    "--enable-mutable-globals",
+    "--enable-bulk-memory",
+    "--enable-nontrapping-float-to-int",
+]
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = [
+    "-Oz",
+    "--enable-mutable-globals",
+    "--enable-bulk-memory",
+    "--enable-nontrapping-float-to-int",
+]
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = [
@@ -183,13 +196,13 @@ wasm-opt = [
 ]
 
 [profile.dev]
-incremental = true
-opt-level = 0
-lto = false
+incremental = false
+opt-level = "z"
+lto = true
 panic = "unwind"
 debug = false
-codegen-units = 4
-strip = "none"
+codegen-units = 1
+strip = "debuginfo"
 
 [profile.release]
 incremental = false
@@ -198,7 +211,7 @@ lto = true
 panic = "unwind"
 debug = false
 codegen-units = 1
-strip = true
+strip = "debuginfo"
 "#;
 
 /// `www/index.html` shell injected into every playground build. Uses `src=`
@@ -324,8 +337,17 @@ pub const WASM_PACK_ARG_TARGET: &str = "--target";
 /// wasm-pack target flavour we always build for.
 pub const WASM_PACK_TARGET_WEB: &str = "web";
 
-/// `--dev` profile: faster compile, larger output, no wasm-opt pass.
-pub const WASM_PACK_ARG_DEV: &str = "--dev";
+/// `--release` profile: optimised wasm, smaller output, runs wasm-opt.
+pub const WASM_PACK_ARG_RELEASE: &str = "--release";
+
+/// Skip generating the `*.d.ts` typings file next to the JS glue.
+pub const WASM_PACK_ARG_NO_TYPESCRIPT: &str = "--no-typescript";
+
+/// Skip generating `package.json` / npm scaffolding under `pkg/`.
+pub const WASM_PACK_ARG_NO_PACK: &str = "--no-pack";
+
+/// Remove the `.gitignore` wasm-pack writes into the output directory.
+pub const WASM_PACK_ARG_NO_GITIGNORE: &str = "--no-gitignore";
 
 /// `--out-dir www/pkg` so the existing static-resource route serves the
 /// wasm + glue JS without any extra view/controller.

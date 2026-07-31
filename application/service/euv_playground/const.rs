@@ -187,14 +187,6 @@ wasm-opt = [
     "--enable-nontrapping-float-to-int",
 ]
 
-[package.metadata.wasm-pack.profile.release]
-wasm-opt = [
-    "-Oz",
-    "--enable-mutable-globals",
-    "--enable-bulk-memory",
-    "--enable-nontrapping-float-to-int",
-]
-
 [profile.dev]
 incremental = false
 opt-level = "z"

@@ -332,7 +332,7 @@ button,
 }
 
 .stat-card.balance {
-  border-left: var(--hl-border-w-thick) solid var(--hl-warning);
+  border-left: var(--hl-border-w-thick) solid var(--hl-success);
 }
 
 .stat-card.income {
@@ -340,7 +340,7 @@ button,
 }
 
 .stat-card.expense {
-  border-left: var(--hl-border-w-thick) solid var(--hl-error);
+  border-left: var(--hl-border-w-thick) solid var(--hl-success);
 }
 
 .stat-label {

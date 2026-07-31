@@ -34,7 +34,39 @@ const UserStatus = Object.freeze({
 
 const orderRequestManager = window.requestManager;
 
-async function checkAuth() {
+const CSS_VAR_RE = /^\s*var\(\s*(--[\w-]+)\s*(?:,\s*[^)]*)?\)\s*$/;
+
+function resolveCssVar (value) {
+  if (typeof value !== 'string') return value;
+  const match = value.match(CSS_VAR_RE);
+  if (!match) return value;
+  const resolved = getComputedStyle(document.documentElement)
+    .getPropertyValue(match[1])
+    .trim();
+  return resolved || value;
+}
+
+function resolveChartCssVars (option) {
+  if (Array.isArray(option)) {
+    for (let i = 0; i < option.length; i++) {
+      option[i] = resolveChartCssVars(option[i]);
+    }
+    return option;
+  }
+  if (option && typeof option === 'object') {
+    for (const key of Object.keys(option)) {
+      const val = option[key];
+      if (typeof val === 'string') {
+        option[key] = resolveCssVar(val);
+      } else if (val && typeof val === 'object') {
+        option[key] = resolveChartCssVars(val);
+      }
+    }
+  }
+  return option;
+}
+
+async function checkAuth () {
   try {
     const response = await fetch('/api/auth/user/info', {
       method: 'GET',
@@ -63,7 +95,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initMyQRFeature();
 });
 
-function initThemeChangeListener() {
+function initThemeChangeListener () {
   const target = document.documentElement;
   const observer = new MutationObserver((mutations) => {
     for (const m of mutations) {
@@ -79,7 +111,7 @@ function initThemeChangeListener() {
   });
 }
 
-function refreshAllCharts() {
+function refreshAllCharts () {
   const overviewPages = ['dashboard', 'user-records'];
   if (!overviewPages.includes(currentPage)) return;
   if (currentPage === 'dashboard') {
@@ -89,7 +121,7 @@ function refreshAllCharts() {
   }
 }
 
-function initEventListeners() {
+function initEventListeners () {
   document
     .getElementById('logout-btn')
     ?.addEventListener('click', () => handleLogout());
@@ -162,7 +194,7 @@ function initEventListeners() {
   });
 }
 
-function toggleMobileSidebar() {
+function toggleMobileSidebar () {
   const sidebar = document.querySelector('.sidebar');
   const overlay = document.getElementById('sidebar-overlay');
   if (sidebar && overlay) {
@@ -171,7 +203,7 @@ function toggleMobileSidebar() {
   }
 }
 
-function closeMobileSidebar() {
+function closeMobileSidebar () {
   const sidebar = document.querySelector('.sidebar');
   const overlay = document.getElementById('sidebar-overlay');
   if (sidebar && overlay) {
@@ -180,14 +212,14 @@ function closeMobileSidebar() {
   }
 }
 
-function showPage(pageId) {
+function showPage (pageId) {
   document.querySelectorAll('.login-page, #main-app').forEach((el) => {
     el.classList.add('hidden');
   });
   document.getElementById(pageId)?.classList.remove('hidden');
 }
 
-function showMainApp() {
+function showMainApp () {
   showPage('main-app');
   updateUserInfo();
   initDatePickers();
@@ -205,7 +237,7 @@ function showMainApp() {
   }
 }
 
-function initHashRouter() {
+function initHashRouter () {
   window.addEventListener('hashchange', () => {
     const routeState = parseRouteHash();
     if (routeState.page) {
@@ -218,7 +250,7 @@ function initHashRouter() {
   });
 }
 
-function parseRouteHash() {
+function parseRouteHash () {
   const hash = window.location.hash.replace('#', '');
   if (!hash) return {};
   const params = new URLSearchParams(hash);
@@ -229,7 +261,7 @@ function parseRouteHash() {
   };
 }
 
-function buildRouteHash(page, extraParams = {}) {
+function buildRouteHash (page, extraParams = {}) {
   const params = new URLSearchParams({ page });
   Object.entries(extraParams).forEach(([key, value]) => {
     if (value !== null && value !== undefined) {
@@ -239,14 +271,14 @@ function buildRouteHash(page, extraParams = {}) {
   return '#' + params.toString();
 }
 
-function updateRouteHash(page, extraParams = {}) {
+function updateRouteHash (page, extraParams = {}) {
   const hash = buildRouteHash(page, extraParams);
   if (window.location.hash !== hash) {
     window.location.hash = hash;
   }
 }
 
-function switchToPage(page) {
+function switchToPage (page) {
   const isAdmin = currentUser && currentUser.role === UserRole.ADMIN;
   if (page === 'dashboard' && !isAdmin) {
     navigateTo('records', true);
@@ -281,7 +313,7 @@ function switchToPage(page) {
   if (page === 'user-records') loadUserRecords();
 }
 
-function updateUserInfo() {
+function updateUserInfo () {
   if (!currentUser) return;
   document.getElementById('current-user').textContent = currentUser.username;
   const roleBadge = document.getElementById('user-role');
@@ -294,7 +326,7 @@ function updateUserInfo() {
   }
 }
 
-function navigateTo(page, updateHash = true) {
+function navigateTo (page, updateHash = true) {
   switchToPage(page);
   if (updateHash) {
     if (page === 'user-records' && viewingUserId) {
@@ -324,7 +356,7 @@ let categoryTrendChart = null;
 let userRetentionChart = null;
 let topUsersChart = null;
 
-function disposeAllCharts() {
+function disposeAllCharts () {
   const charts = [
     trendChart,
     compareChart,
@@ -346,7 +378,7 @@ function disposeAllCharts() {
     if (chart && typeof chart.dispose === 'function') {
       try {
         chart.dispose();
-      } catch (e) {}
+      } catch (e) { }
     }
   });
   trendChart = null;
@@ -366,7 +398,7 @@ function disposeAllCharts() {
   topUsersChart = null;
 }
 
-function showDashboardLoading() {
+function showDashboardLoading () {
   disposeAllCharts();
   const chartIds = [
     'trend-chart',
@@ -425,7 +457,7 @@ function showDashboardLoading() {
   });
 }
 
-async function loadOverview() {
+async function loadOverview () {
   const requestKey = 'load_overview';
   showDashboardLoading();
   try {
@@ -476,7 +508,7 @@ async function loadOverview() {
   }
 }
 
-function updateOverviewStats(data) {
+function updateOverviewStats (data) {
   document.getElementById('today-transactions').textContent =
     data.today.transactions;
   document.getElementById('today-income').textContent =
@@ -498,7 +530,7 @@ function updateOverviewStats(data) {
   updateChangeIndicator('avg-expense-change', data.changes.avg_expense_change);
 }
 
-function updateChangeIndicator(elementId, change) {
+function updateChangeIndicator (elementId, change) {
   const element = document.getElementById(elementId);
   if (change === null || change === undefined) {
     element.textContent = '--';
@@ -512,7 +544,7 @@ function updateChangeIndicator(elementId, change) {
   element.className = `stat-change ${isUp ? 'up' : 'down'}`;
 }
 
-function initTrendChart(dailyTrend) {
+function initTrendChart (dailyTrend) {
   const chartDom = document.getElementById('trend-chart');
   if (!chartDom) return;
   const loadingEl = chartDom.querySelector('.chart-loading');
@@ -607,10 +639,10 @@ function initTrendChart(dailyTrend) {
       },
     ],
   };
-  trendChart.setOption(option);
+  trendChart.setOption(resolveChartCssVars(option));
 }
 
-function initCompareChart(monthlyComparison) {
+function initCompareChart (monthlyComparison) {
   const chartDom = document.getElementById('compare-chart');
   if (!chartDom) return;
   const loadingEl = chartDom.querySelector('.chart-loading');
@@ -711,10 +743,10 @@ function initCompareChart(monthlyComparison) {
       },
     ],
   };
-  compareChart.setOption(option);
+  compareChart.setOption(resolveChartCssVars(option));
 }
 
-function initCategoryChart(categoryDistribution) {
+function initCategoryChart (categoryDistribution) {
   const chartDom = document.getElementById('category-chart');
   if (!chartDom) return;
   const loadingEl = chartDom.querySelector('.chart-loading');
@@ -791,10 +823,10 @@ function initCategoryChart(categoryDistribution) {
       },
     ],
   };
-  categoryChart.setOption(option);
+  categoryChart.setOption(resolveChartCssVars(option));
 }
 
-function initUserGrowthChart(userGrowth) {
+function initUserGrowthChart (userGrowth) {
   const chartDom = document.getElementById('user-growth-chart');
   if (!chartDom) return;
   const loadingEl = chartDom.querySelector('.chart-loading');
@@ -870,10 +902,10 @@ function initUserGrowthChart(userGrowth) {
       },
     ],
   };
-  userGrowthChart.setOption(option);
+  userGrowthChart.setOption(resolveChartCssVars(option));
 }
 
-function initTypeDistributionChart(distribution) {
+function initTypeDistributionChart (distribution) {
   const chartDom = document.getElementById('type-distribution-chart');
   if (!chartDom) return;
   const loadingEl = chartDom.querySelector('.chart-loading');
@@ -962,10 +994,10 @@ function initTypeDistributionChart(distribution) {
       },
     ],
   };
-  typeDistributionChart.setOption(option);
+  typeDistributionChart.setOption(resolveChartCssVars(option));
 }
 
-function initCountTrendChart(trend) {
+function initCountTrendChart (trend) {
   const chartDom = document.getElementById('count-trend-chart');
   if (!chartDom) return;
   const loadingEl = chartDom.querySelector('.chart-loading');
@@ -1036,10 +1068,10 @@ function initCountTrendChart(trend) {
       },
     ],
   };
-  countTrendChart.setOption(option);
+  countTrendChart.setOption(resolveChartCssVars(option));
 }
 
-function initCategoryAmountChart(distribution) {
+function initCategoryAmountChart (distribution) {
   const chartDom = document.getElementById('category-amount-chart');
   if (!chartDom) return;
   const loadingEl = chartDom.querySelector('.chart-loading');
@@ -1112,10 +1144,10 @@ function initCategoryAmountChart(distribution) {
       },
     ],
   };
-  categoryAmountChart.setOption(option);
+  categoryAmountChart.setOption(resolveChartCssVars(option));
 }
 
-function initUserActivityChart(activity) {
+function initUserActivityChart (activity) {
   const chartDom = document.getElementById('user-activity-chart');
   if (!chartDom) return;
   const loadingEl = chartDom.querySelector('.chart-loading');
@@ -1210,10 +1242,10 @@ function initUserActivityChart(activity) {
       },
     ],
   };
-  userActivityChart.setOption(option);
+  userActivityChart.setOption(resolveChartCssVars(option));
 }
 
-function initRatioTrendChart(ratioTrend) {
+function initRatioTrendChart (ratioTrend) {
   const chartDom = document.getElementById('ratio-trend-chart');
   if (!chartDom) return;
   const loadingEl = chartDom.querySelector('.chart-loading');
@@ -1311,10 +1343,10 @@ function initRatioTrendChart(ratioTrend) {
       },
     ],
   };
-  ratioTrendChart.setOption(option);
+  ratioTrendChart.setOption(resolveChartCssVars(option));
 }
 
-function initHourlyDistributionChart(hourlyData) {
+function initHourlyDistributionChart (hourlyData) {
   const chartDom = document.getElementById('hourly-distribution-chart');
   if (!chartDom) return;
   const loadingEl = chartDom.querySelector('.chart-loading');
@@ -1386,10 +1418,10 @@ function initHourlyDistributionChart(hourlyData) {
       },
     ],
   };
-  hourlyDistributionChart.setOption(option);
+  hourlyDistributionChart.setOption(resolveChartCssVars(option));
 }
 
-function initWeeklyTrendChart(weeklyTrend) {
+function initWeeklyTrendChart (weeklyTrend) {
   const chartDom = document.getElementById('weekly-trend-chart');
   if (!chartDom) return;
   const loadingEl = chartDom.querySelector('.chart-loading');
@@ -1468,10 +1500,10 @@ function initWeeklyTrendChart(weeklyTrend) {
       },
     ],
   };
-  weeklyTrendChart.setOption(option);
+  weeklyTrendChart.setOption(resolveChartCssVars(option));
 }
 
-function initPeriodOverPeriodChart(popData) {
+function initPeriodOverPeriodChart (popData) {
   const chartDom = document.getElementById('period-over-period-chart');
   if (!chartDom) return;
   const loadingEl = chartDom.querySelector('.chart-loading');
@@ -1565,10 +1597,10 @@ function initPeriodOverPeriodChart(popData) {
       },
     ],
   };
-  periodOverPeriodChart.setOption(option);
+  periodOverPeriodChart.setOption(resolveChartCssVars(option));
 }
 
-function initCategoryTrendChart(categoryTrends) {
+function initCategoryTrendChart (categoryTrends) {
   const chartDom = document.getElementById('category-trend-chart');
   if (!chartDom || categoryTrends.length === 0) return;
   const loadingEl = chartDom.querySelector('.chart-loading');
@@ -1640,10 +1672,10 @@ function initCategoryTrendChart(categoryTrends) {
     },
     series: series,
   };
-  categoryTrendChart.setOption(option);
+  categoryTrendChart.setOption(resolveChartCssVars(option));
 }
 
-function initUserRetentionChart(retentionData) {
+function initUserRetentionChart (retentionData) {
   const chartDom = document.getElementById('user-retention-chart');
   if (!chartDom) return;
   const loadingEl = chartDom.querySelector('.chart-loading');
@@ -1723,10 +1755,10 @@ function initUserRetentionChart(retentionData) {
       },
     ],
   };
-  userRetentionChart.setOption(option);
+  userRetentionChart.setOption(resolveChartCssVars(option));
 }
 
-function initTopUsersChart(topUsers) {
+function initTopUsersChart (topUsers) {
   const chartDom = document.getElementById('top-users-chart');
   if (!chartDom || topUsers.length === 0) return;
   const loadingEl = chartDom.querySelector('.chart-loading');
@@ -1794,10 +1826,10 @@ function initTopUsersChart(topUsers) {
       },
     ],
   };
-  topUsersChart.setOption(option);
+  topUsersChart.setOption(resolveChartCssVars(option));
 }
 
-function initAvgTransactionStats(stats) {
+function initAvgTransactionStats (stats) {
   const avgIncomeEl = document.getElementById('avg-income-per-transaction');
   const avgExpenseEl = document.getElementById('avg-expense-per-transaction');
   const overallAvgEl = document.getElementById('overall-avg-amount');
@@ -1838,7 +1870,7 @@ window.addEventListener('resize', () => {
   topUsersChart?.resize();
 });
 
-async function handleLogout() {
+async function handleLogout () {
   currentUser = null;
   currentToken = null;
   viewingUserId = null;
@@ -1854,7 +1886,7 @@ async function handleLogout() {
   window.location.href = '/auth?location=/order';
 }
 
-async function handleAuthError(message) {
+async function handleAuthError (message) {
   currentUser = null;
   currentToken = null;
   viewingUserId = null;
@@ -1871,11 +1903,11 @@ async function handleAuthError(message) {
   window.location.href = '/auth?location=/order';
 }
 
-async function loadDashboard() {
+async function loadDashboard () {
   await loadOverview();
 }
 
-function copyBillNo(billNo) {
+function copyBillNo (billNo) {
   if (!billNo) return;
   navigator.clipboard
     .writeText(billNo)
@@ -1887,7 +1919,7 @@ function copyBillNo(billNo) {
     });
 }
 
-function updateRecordsSummary(data) {
+function updateRecordsSummary (data) {
   if (data) {
     const income = parseFloat(data.total_income) || 0;
     const expense = parseFloat(data.total_expense) || 0;
@@ -1902,13 +1934,13 @@ function updateRecordsSummary(data) {
   }
 }
 
-async function loadRecords() {
+async function loadRecords () {
   currentPageNum = 1;
   cacheId = null;
   await applyFilters();
 }
 
-function showListLoading(listId) {
+function showListLoading (listId) {
   const listEl = document.getElementById(listId);
   if (listEl) {
     listEl.innerHTML =
@@ -1916,7 +1948,7 @@ function showListLoading(listId) {
   }
 }
 
-async function applyFilters(pageDirection = null) {
+async function applyFilters (pageDirection = null) {
   const requestKey = 'apply_filters';
   showListLoading('all-records-list');
   const startDate = document.getElementById('filter-start-date').value;
@@ -1995,21 +2027,21 @@ async function applyFilters(pageDirection = null) {
   }
 }
 
-function goToNextPage() {
+function goToNextPage () {
   applyFilters('next');
 }
 
-function goToPrevPage() {
+function goToPrevPage () {
   applyFilters('prev');
 }
 
-function goToPage(pageNum) {
+function goToPage (pageNum) {
   if (pageNum === currentPageNum) return;
   currentPageNum = pageNum;
   applyFilters();
 }
 
-function renderPagination() {
+function renderPagination () {
   const startRecord = (currentPageNum - 1) * recordsLimit + 1;
   const endRecord = startRecord + allRecords.length - 1;
   const totalText =
@@ -2064,7 +2096,7 @@ function renderPagination() {
     paginationControlsHtml;
 }
 
-function resetFilters() {
+function resetFilters () {
   document.getElementById('filter-start-date').value = '';
   document.getElementById('filter-end-date').value = '';
   const filterCategory = document.getElementById('filter-category');
@@ -2074,7 +2106,7 @@ function resetFilters() {
   applyFilters('reset');
 }
 
-function renderAllRecords(records) {
+function renderAllRecords (records) {
   const container = document.getElementById('all-records-list');
   if (!records || !Array.isArray(records) || records.length === 0) {
     container.innerHTML = `
@@ -2118,7 +2150,7 @@ function renderAllRecords(records) {
   container.innerHTML = recordHtmls.join('');
 }
 
-function showCreateRecordModal(targetUserId = null, targetUserName = null) {
+function showCreateRecordModal (targetUserId = null, targetUserName = null) {
   document.getElementById('record-modal-title').textContent = 'New Record';
   document.getElementById('record-form').reset();
   selectedImages = [];
@@ -2130,7 +2162,7 @@ function showCreateRecordModal(targetUserId = null, targetUserName = null) {
   openModal('record-modal');
 }
 
-async function uploadImageToServer(imageData) {
+async function uploadImageToServer (imageData) {
   const headers = {
     'X-File-Name': encodeURIComponent(imageData.file_name),
     'X-Mime-Type': imageData.mime_type,
@@ -2151,7 +2183,7 @@ async function uploadImageToServer(imageData) {
   throw new Error(result.message || 'Image upload failed');
 }
 
-async function handleRecordSubmit(e) {
+async function handleRecordSubmit (e) {
   e.preventDefault();
   const requestKey = 'record_submit';
   if (orderRequestManager.isPending(requestKey)) {
@@ -2166,9 +2198,9 @@ async function handleRecordSubmit(e) {
     document.getElementById('record-description').value || null;
   const target_user_id =
     currentUser &&
-    currentUser.role === UserRole.ADMIN &&
-    viewingUserId &&
-    currentPage === 'user-records'
+      currentUser.role === UserRole.ADMIN &&
+      viewingUserId &&
+      currentPage === 'user-records'
       ? viewingUserId
       : null;
   try {
@@ -2226,7 +2258,7 @@ async function handleRecordSubmit(e) {
   }
 }
 
-function setRecordModalLoading(isLoading) {
+function setRecordModalLoading (isLoading) {
   const modal = document.getElementById('record-modal');
   const submitBtn = modal?.querySelector('button[type="submit"]');
   const closeBtn = modal?.querySelector('.modal-close');
@@ -2256,7 +2288,7 @@ function setRecordModalLoading(isLoading) {
   }
 }
 
-function printRecordData(record) {
+function printRecordData (record) {
   if (!record) {
     showToast('No record data to print', 'error');
     return;
@@ -2321,33 +2353,30 @@ function printRecordData(record) {
         <span class="field-label">User ID</span>
         <span class="field-value">${record.user_id}</span>
       </div>
-      ${
-        record.username
-          ? `
+      ${record.username
+      ? `
       <div class="field-row">
         <span class="field-label">Username</span>
         <span class="field-value">${escapeHtml(record.username)}</span>
       </div>`
-          : ''
-      }
-      ${
-        record.phone
-          ? `
+      : ''
+    }
+      ${record.phone
+      ? `
       <div class="field-row">
         <span class="field-label">Phone</span>
         <span class="field-value">${escapeHtml(record.phone)}</span>
       </div>`
-          : ''
-      }
-      ${
-        record.email
-          ? `
+      : ''
+    }
+      ${record.email
+      ? `
       <div class="field-row">
         <span class="field-label">Email</span>
         <span class="field-value">${escapeHtml(record.email)}</span>
       </div>`
-          : ''
-      }
+      : ''
+    }
       <div class="field-row">
         <span class="field-label">Transaction Type</span>
         <span class="field-value">${transactionTypeLabel}</span>
@@ -2391,7 +2420,7 @@ function printRecordData(record) {
   printWindow.document.close();
 }
 
-async function loadUsers(pageDirection = null) {
+async function loadUsers (pageDirection = null) {
   const requestKey = 'load_users';
   showListLoading('users-list');
   try {
@@ -2455,7 +2484,7 @@ async function loadUsers(pageDirection = null) {
 
 let userSearchDebounceTimer = null;
 
-function handleUserSearchInput() {
+function handleUserSearchInput () {
   if (userSearchDebounceTimer) {
     clearTimeout(userSearchDebounceTimer);
   }
@@ -2465,7 +2494,7 @@ function handleUserSearchInput() {
   }, 300);
 }
 
-function resetUserSearch() {
+function resetUserSearch () {
   const searchInput = document.getElementById('user-search-keyword');
   if (searchInput) {
     searchInput.value = '';
@@ -2474,20 +2503,20 @@ function resetUserSearch() {
   loadUsers();
 }
 
-function goToUsersNextPage() {
+function goToUsersNextPage () {
   const totalPages = Math.ceil(usersTotalCount / usersLimit);
   if (usersCurrentPage < totalPages) {
     loadUsers('next');
   }
 }
 
-function goToUsersPrevPage() {
+function goToUsersPrevPage () {
   if (usersCurrentPage > 1) {
     loadUsers('prev');
   }
 }
 
-function renderUsers(users) {
+function renderUsers (users) {
   const container = document.getElementById('users-list');
   if (!users || users.length === 0) {
     container.innerHTML = `
@@ -2519,7 +2548,7 @@ function renderUsers(users) {
     .join('');
 }
 
-function renderUsersPagination() {
+function renderUsersPagination () {
   const paginationContainer = document.getElementById('users-pagination');
   if (!paginationContainer) return;
   const startUser = (usersCurrentPage - 1) * usersLimit + 1;
@@ -2575,27 +2604,27 @@ function renderUsersPagination() {
   `;
 }
 
-function goToUsersPage(pageNum) {
+function goToUsersPage (pageNum) {
   if (pageNum === usersCurrentPage) return;
   const direction = pageNum > usersCurrentPage ? 'next' : 'prev';
   usersCurrentPage = pageNum;
   loadUsers(direction);
 }
 
-function viewUserRecords(userId, userName) {
+function viewUserRecords (userId, userName) {
   viewingUserId = userId;
   viewingUserName = userName;
   navigateTo('user-records');
 }
 
-async function loadUserRecords() {
+async function loadUserRecords () {
   if (!viewingUserId) return;
   document.getElementById('user-records-title').textContent =
     `Records for ${viewingUserName || 'User'}`;
   await applyUserRecordFilters('reset');
 }
 
-async function applyUserRecordFilters(pageDirection = null) {
+async function applyUserRecordFilters (pageDirection = null) {
   const requestKey = 'apply_user_filters';
   showListLoading('user-records-list');
   const startDate = document.getElementById('user-filter-start-date').value;
@@ -2668,7 +2697,7 @@ async function applyUserRecordFilters(pageDirection = null) {
   }
 }
 
-function renderUserRecords(records) {
+function renderUserRecords (records) {
   const container = document.getElementById('user-records-list');
   if (!records || !Array.isArray(records) || records.length === 0) {
     container.innerHTML = `
@@ -2710,7 +2739,7 @@ function renderUserRecords(records) {
   container.innerHTML = recordHtmls.join('');
 }
 
-function updateUserRecordStats(data) {
+function updateUserRecordStats (data) {
   if (data) {
     const income = parseFloat(data.total_income) || 0;
     const expense = parseFloat(data.total_expense) || 0;
@@ -2724,7 +2753,7 @@ function updateUserRecordStats(data) {
   }
 }
 
-function renderUserRecordPagination() {
+function renderUserRecordPagination () {
   const startRecord = (currentPageNum - 1) * recordsLimit + 1;
   const endRecord = startRecord + allRecords.length - 1;
   const totalText =
@@ -2779,25 +2808,25 @@ function renderUserRecordPagination() {
     paginationControlsHtml;
 }
 
-function goToUserRecordPage(pageNum) {
+function goToUserRecordPage (pageNum) {
   if (pageNum === currentPageNum) return;
   currentPageNum = pageNum;
   applyUserRecordFilters();
 }
 
-function goToUserRecordNextPage() {
+function goToUserRecordNextPage () {
   if (currentPageNum < Math.ceil(totalRecords / recordsLimit)) {
     applyUserRecordFilters('next');
   }
 }
 
-function goToUserRecordPrevPage() {
+function goToUserRecordPrevPage () {
   if (currentPageNum > 1) {
     applyUserRecordFilters('prev');
   }
 }
 
-function resetUserRecordFilters() {
+function resetUserRecordFilters () {
   document.getElementById('user-filter-start-date').value = '';
   document.getElementById('user-filter-end-date').value = '';
   const userFilterCategory = document.getElementById('user-filter-category');
@@ -2807,7 +2836,7 @@ function resetUserRecordFilters() {
   applyUserRecordFilters('reset');
 }
 
-function loadProfile() {
+function loadProfile () {
   if (!currentUser) return;
   document.getElementById('profile-username').textContent =
     currentUser.username;
@@ -2815,7 +2844,7 @@ function loadProfile() {
   document.getElementById('profile-phone').value = currentUser.phone || '';
 }
 
-async function handleProfileSubmit(e) {
+async function handleProfileSubmit (e) {
   e.preventDefault();
   const requestKey = 'profile_submit';
   if (orderRequestManager.isPending(requestKey)) {
@@ -2866,7 +2895,7 @@ async function handleProfileSubmit(e) {
   }
 }
 
-async function handlePasswordSubmit(e) {
+async function handlePasswordSubmit (e) {
   e.preventDefault();
   const requestKey = 'password_submit';
   if (orderRequestManager.isPending(requestKey)) {
@@ -2915,15 +2944,15 @@ async function handlePasswordSubmit(e) {
   }
 }
 
-function openModal(modalId) {
+function openModal (modalId) {
   document.getElementById(modalId)?.classList.add('active');
 }
 
-function closeModal(modalId) {
+function closeModal (modalId) {
   document.getElementById(modalId)?.classList.remove('active');
 }
 
-function showToast(message, type = 'info', duration = 3000) {
+function showToast (message, type = 'info', duration = 3000) {
   const container = document.getElementById('toast-container');
   if (!container) return;
   const toast = document.createElement('div');
@@ -2938,24 +2967,24 @@ function showToast(message, type = 'info', duration = 3000) {
   setTimeout(() => hideToast(toast), duration);
 }
 
-function hideToast(toast) {
+function hideToast (toast) {
   if (!toast || toast.classList.contains('hiding')) return;
   toast.classList.add('hiding');
   setTimeout(() => toast.remove(), 300);
 }
 
-function escapeHtml(text) {
+function escapeHtml (text) {
   if (!text) return '';
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
 }
 
-function formatAmount(amount) {
+function formatAmount (amount) {
   return parseFloat(amount).toFixed(2);
 }
 
-function formatDate(timestamp) {
+function formatDate (timestamp) {
   if (timestamp === null || timestamp === undefined || timestamp === '')
     return '';
   const date = new Date(
@@ -2978,21 +3007,21 @@ class DatePicker {
     this.inputId = inputId;
     this.input = document.getElementById(inputId);
     if (!this.input) return;
-    this.onChange = options.onChange || (() => {});
+    this.onChange = options.onChange || (() => { });
     this.currentDate = new Date();
     this.selectedDate = null;
     this.isOpen = false;
     this.init();
   }
 
-  init() {
+  init () {
     this.createWrapper();
     this.createCalendar();
     this.bindEvents();
     this.setInitialValue();
   }
 
-  createWrapper() {
+  createWrapper () {
     const parent = this.input.parentNode;
     this.wrapper = document.createElement('div');
     this.wrapper.className = 'date-picker-wrapper';
@@ -3009,7 +3038,7 @@ class DatePicker {
     this.wrapper.appendChild(icon);
   }
 
-  createCalendar() {
+  createCalendar () {
     this.calendar = document.createElement('div');
     this.calendar.className = 'date-picker-calendar';
     this.calendar.innerHTML = `
@@ -3040,7 +3069,7 @@ class DatePicker {
     );
   }
 
-  bindEvents() {
+  bindEvents () {
     this.input.addEventListener('click', () => this.toggle());
     this.calendar.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -3064,25 +3093,25 @@ class DatePicker {
     window.addEventListener('resize', () => this.close());
   }
 
-  setInitialValue() {
+  setInitialValue () {
     if (this.input.value) {
       this.selectedDate = new Date(this.input.value);
       this.currentDate = new Date(this.input.value);
     }
   }
 
-  toggle() {
+  toggle () {
     this.isOpen ? this.close() : this.open();
   }
 
-  open() {
+  open () {
     this.isOpen = true;
     this.calendar.classList.add('active');
     this.positionCalendar();
     this.renderCalendar();
   }
 
-  positionCalendar() {
+  positionCalendar () {
     const rect = this.wrapper.getBoundingClientRect();
     const calendarWidth = 280;
     const calendarHeight = 320;
@@ -3110,12 +3139,12 @@ class DatePicker {
     this.calendar.style.top = `${top}px`;
   }
 
-  close() {
+  close () {
     this.isOpen = false;
     this.calendar.classList.remove('active');
   }
 
-  navigate(direction) {
+  navigate (direction) {
     if (direction === 'prev') {
       this.currentDate.setMonth(this.currentDate.getMonth() - 1);
     } else {
@@ -3124,14 +3153,14 @@ class DatePicker {
     this.renderCalendar();
   }
 
-  selectDate(dateStr) {
+  selectDate (dateStr) {
     this.selectedDate = new Date(dateStr);
     this.input.value = dateStr;
     this.onChange(dateStr);
     this.close();
   }
 
-  handleAction(action) {
+  handleAction (action) {
     if (action === 'today') {
       const today = new Date();
       this.currentDate = new Date(today);
@@ -3144,7 +3173,7 @@ class DatePicker {
     }
   }
 
-  renderCalendar() {
+  renderCalendar () {
     const year = this.currentDate.getFullYear();
     const month = this.currentDate.getMonth();
     this.monthYearLabel.textContent = new Date(year, month).toLocaleDateString(
@@ -3180,7 +3209,7 @@ class DatePicker {
     this.daysContainer.innerHTML = html;
   }
 
-  formatDate(date) {
+  formatDate (date) {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
     const d = String(date.getDate()).padStart(2, '0');
@@ -3188,7 +3217,7 @@ class DatePicker {
   }
 }
 
-function initDatePickers() {
+function initDatePickers () {
   const startDatePicker = new DatePicker('filter-start-date', {
     onChange: () => applyFilters(),
   });
@@ -3214,14 +3243,14 @@ let lastScannedData = null;
 let lastScanTime = 0;
 const SCAN_COOLDOWN_MS = 1000;
 
-function initScanFeature() {
+function initScanFeature () {
   const scanBtn = document.getElementById('scan-btn');
   if (scanBtn) {
     scanBtn.addEventListener('click', openScanModal);
   }
 }
 
-function openScanModal() {
+function openScanModal () {
   closeMobileSidebar();
   const modal = document.getElementById('scan-modal');
   if (modal) {
@@ -3230,7 +3259,7 @@ function openScanModal() {
   }
 }
 
-function closeScanModal() {
+function closeScanModal () {
   const modal = document.getElementById('scan-modal');
   if (modal) {
     modal.classList.remove('active');
@@ -3238,7 +3267,7 @@ function closeScanModal() {
   stopScanning();
 }
 
-async function startScanning() {
+async function startScanning () {
   scanVideoElement = document.getElementById('scan-video');
   scanCanvasElement = document.getElementById('scan-canvas');
   if (!scanVideoElement || !scanCanvasElement) {
@@ -3283,7 +3312,7 @@ async function startScanning() {
   }
 }
 
-function stopScanning() {
+function stopScanning () {
   isScanning = false;
   if (scanAnimationId) {
     cancelAnimationFrame(scanAnimationId);
@@ -3298,7 +3327,7 @@ function stopScanning() {
   }
 }
 
-function tickScan() {
+function tickScan () {
   if (
     !isScanning ||
     !scanVideoElement ||
@@ -3340,7 +3369,7 @@ function tickScan() {
   scanAnimationId = requestAnimationFrame(tickScan);
 }
 
-async function handleScanResult(qrData) {
+async function handleScanResult (qrData) {
   if (!qrData || qrData.trim().length === 0) {
     showScanError('Invalid QR code. Expected user ID.');
     return;
@@ -3375,7 +3404,7 @@ async function handleScanResult(qrData) {
   }
 }
 
-function showScanError(message) {
+function showScanError (message) {
   const errorDiv = document.getElementById('scan-error');
   if (errorDiv) {
     errorDiv.textContent = message;
@@ -3383,21 +3412,21 @@ function showScanError(message) {
   }
 }
 
-async function switchCamera() {
+async function switchCamera () {
   stopScanning();
   scanCurrentFacingMode =
     scanCurrentFacingMode === 'environment' ? 'user' : 'environment';
   await startScanning();
 }
 
-function initMyQRFeature() {
+function initMyQRFeature () {
   const myQRBtn = document.getElementById('my-qr-btn');
   if (myQRBtn) {
     myQRBtn.addEventListener('click', openMyQRModal);
   }
 }
 
-function openMyQRModal() {
+function openMyQRModal () {
   closeMobileSidebar();
   const modal = document.getElementById('my-qr-modal');
   if (!modal) {
@@ -3415,14 +3444,14 @@ function openMyQRModal() {
   modal.classList.add('active');
 }
 
-function closeMyQRModal() {
+function closeMyQRModal () {
   const modal = document.getElementById('my-qr-modal');
   if (modal) {
     modal.classList.remove('active');
   }
 }
 
-function generateMyQRCode(userId) {
+function generateMyQRCode (userId) {
   const container = document.getElementById('my-qr-canvas');
   if (!container) {
     return;
@@ -3443,7 +3472,7 @@ function generateMyQRCode(userId) {
   }
 }
 
-function downloadMyQRCode() {
+function downloadMyQRCode () {
   const container = document.getElementById('my-qr-canvas');
   if (!container) {
     return;
@@ -3470,7 +3499,7 @@ let dragStart = { x: 0, y: 0 };
 let rafId = null;
 let pendingPosition = null;
 
-function handleImageSelect(event) {
+function handleImageSelect (event) {
   const files = event.target.files;
   if (!files || files.length === 0) return;
   Array.from(files).forEach((file) => {
@@ -3516,7 +3545,7 @@ function handleImageSelect(event) {
   event.target.value = '';
 }
 
-function renderImagePreviewList() {
+function renderImagePreviewList () {
   const container = document.getElementById('image-preview-list');
   if (!container) return;
   if (selectedImages.length === 0) {
@@ -3535,12 +3564,12 @@ function renderImagePreviewList() {
     .join('');
 }
 
-function removeSelectedImage(index) {
+function removeSelectedImage (index) {
   selectedImages.splice(index, 1);
   renderImagePreviewList();
 }
 
-function openImagePreview(indexOrId, isSelected = false) {
+function openImagePreview (indexOrId, isSelected = false) {
   let imageData;
   const img = document.getElementById('preview-image');
   img.style.display = 'block';
@@ -3563,7 +3592,7 @@ function openImagePreview(indexOrId, isSelected = false) {
   openModal('image-preview-modal');
 }
 
-async function loadAndPreviewImage(imageData) {
+async function loadAndPreviewImage (imageData) {
   const img = document.getElementById('preview-image');
   img.style.display = 'block';
   const requestKey = `preview_image_${imageData.id}`;
@@ -3591,7 +3620,7 @@ async function loadAndPreviewImage(imageData) {
   }
 }
 
-function closeImagePreviewModal() {
+function closeImagePreviewModal () {
   closeModal('image-preview-modal');
   if (currentPreviewImage && currentPreviewImage.blobUrl) {
     URL.revokeObjectURL(currentPreviewImage.blobUrl);
@@ -3612,34 +3641,34 @@ function closeImagePreviewModal() {
   }
 }
 
-function zoomIn() {
+function zoomIn () {
   currentZoom = Math.min(currentZoom + 0.25, 3);
   updateZoom();
 }
 
-function zoomOut() {
+function zoomOut () {
   currentZoom = Math.max(currentZoom - 0.25, 0.5);
   updateZoom();
 }
 
-function resetZoom() {
+function resetZoom () {
   currentZoom = 1;
   imagePosition = { x: 0, y: 0 };
   updateZoom();
 }
 
-function updateZoom() {
+function updateZoom () {
   updateImagePosition();
 }
 
-function updateImagePosition() {
+function updateImagePosition () {
   const img = document.getElementById('preview-image');
   if (img) {
     img.style.transform = `translate(${imagePosition.x}px, ${imagePosition.y}px) scale(${currentZoom})`;
   }
 }
 
-function setupImagePreviewInteractions() {
+function setupImagePreviewInteractions () {
   const container = document.getElementById('image-preview-container');
   const img = document.getElementById('preview-image');
   if (!container || !img) return;
@@ -3651,7 +3680,7 @@ function setupImagePreviewInteractions() {
   img.ondragstart = () => false;
 }
 
-function handleImageWheel(event) {
+function handleImageWheel (event) {
   event.preventDefault();
   const delta = event.deltaY > 0 ? -0.1 : 0.1;
   const newZoom = Math.max(0.5, Math.min(5, currentZoom + delta));
@@ -3661,7 +3690,7 @@ function handleImageWheel(event) {
   }
 }
 
-function handleImageMouseDown(event) {
+function handleImageMouseDown (event) {
   if (event.button !== 0) return;
   event.preventDefault();
   isDragging = true;
@@ -3679,7 +3708,7 @@ function handleImageMouseDown(event) {
   }
 }
 
-function handleImageMouseMove(event) {
+function handleImageMouseMove (event) {
   if (!isDragging) return;
   event.preventDefault();
   pendingPosition = {
@@ -3698,7 +3727,7 @@ function handleImageMouseMove(event) {
   }
 }
 
-function handleImageMouseUp() {
+function handleImageMouseUp () {
   isDragging = false;
   pendingPosition = null;
   if (rafId) {
@@ -3715,13 +3744,13 @@ function handleImageMouseUp() {
   }
 }
 
-function handleImageDoubleClick() {
+function handleImageDoubleClick () {
   currentZoom = 1;
   imagePosition = { x: 0, y: 0 };
   updateZoom();
 }
 
-async function downloadCurrentImage() {
+async function downloadCurrentImage () {
   if (!currentPreviewImage) return;
   const img = document.getElementById('preview-image');
   if (!img || !img.src) return;
@@ -3744,7 +3773,7 @@ async function downloadCurrentImage() {
   }
 }
 
-async function loadRecordImages(recordId) {
+async function loadRecordImages (recordId) {
   const requestKey = `load_images_${recordId}`;
   try {
     const response = await orderRequestManager.fetch(
@@ -3766,7 +3795,7 @@ async function loadRecordImages(recordId) {
   }
 }
 
-function renderRecordImages(recordId, images) {
+function renderRecordImages (recordId, images) {
   if (!images || images.length === 0) return '';
   const imageHtml = images
     .map(
@@ -3780,7 +3809,7 @@ function renderRecordImages(recordId, images) {
   return `<div class="record-images-container">${imageHtml}</div>`;
 }
 
-async function openRecordImagePreview(recordId, imageId) {
+async function openRecordImagePreview (recordId, imageId) {
   const images = currentRecordImages[recordId];
   if (!images) {
     await loadRecordImages(recordId);

@@ -270,10 +270,24 @@ pub const EUV_PLAYGROUND_BUILD_INDEX_HTML: &str = r#"<!doctype html>
 /// finishes the previous one, which matters because wasm-pack builds
 /// spend most of their wall time in `wasm-bindgen` post-processing
 /// rather than actual compilation.
+///
+/// The `[source.crates-io]` replacement routes every dependency fetch
+/// through ByteDance's `rsproxy.cn` sparse index (~150ms p50 from the
+/// build host vs ~1s for direct crates.io). The mirror is injected
+/// into every dynamically-generated playground project via this
+/// constant, so no host-machine config is touched and the upstream
+/// repo stays portable — switching to a different mirror (or back to
+/// default crates.io) is a one-line change here.
 pub const EUV_PLAYGROUND_BUILD_CARGO_CONFIG: &str = r#"[build]
 jobs = 4
 pipelining = true
 target = "wasm32-unknown-unknown"
+
+[source.crates-io]
+replace-with = "rsproxy-sparse"
+
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"
 
 [target.wasm32-unknown-unknown]
 rustflags = [

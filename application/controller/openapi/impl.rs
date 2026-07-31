@@ -7,7 +7,11 @@ impl ServerHook for OpenApiRoute {
         Self
     }
 
-    #[prologue_macros(methods(get, post), response_status_code(200))]
+    #[prologue_macros(
+        methods(get, post),
+        response_status_code(200),
+        response_header(CONTENT_TYPE => APPLICATION_JSON)
+    )]
     #[instrument_trace]
     async fn handle(self, _stream: &mut Stream, ctx: &mut Context) -> Status {
         if let Ok(json_data) = ApiDoc::openapi().to_json() {

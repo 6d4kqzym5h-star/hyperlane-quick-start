@@ -251,7 +251,7 @@ impl EuvPlaygroundService {
 
     /// Writes the submitted code into a fresh temporary crate, runs
     /// `wasm-pack build --target web --release --no-typescript
-    /// --no-pack --no-gitignore` and publishes the produced files into
+    /// --no-pack` and publishes the produced files into
     /// `./resources/static/euv-playground/builds/{project_id}/` so the
     /// existing static-resource route can serve them directly.
     ///
@@ -314,7 +314,6 @@ impl EuvPlaygroundService {
             .arg(WASM_PACK_ARG_RELEASE)
             .arg(WASM_PACK_ARG_NO_TYPESCRIPT)
             .arg(WASM_PACK_ARG_NO_PACK)
-            .arg(WASM_PACK_ARG_NO_GITIGNORE)
             .arg(WASM_PACK_ARG_OUT_DIR)
             .arg(WASM_PACK_OUT_DIR_WWW_PKG)
             .env(

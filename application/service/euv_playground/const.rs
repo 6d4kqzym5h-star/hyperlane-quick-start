@@ -352,9 +352,6 @@ pub const WASM_PACK_ARG_NO_TYPESCRIPT: &str = "--no-typescript";
 /// Skip generating `package.json` / npm scaffolding under `pkg/`.
 pub const WASM_PACK_ARG_NO_PACK: &str = "--no-pack";
 
-/// Remove the `.gitignore` wasm-pack writes into the output directory.
-pub const WASM_PACK_ARG_NO_GITIGNORE: &str = "--no-gitignore";
-
 /// `--out-dir www/pkg` so the existing static-resource route serves the
 /// wasm + glue JS without any extra view/controller.
 pub const WASM_PACK_ARG_OUT_DIR: &str = "--out-dir";

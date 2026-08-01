@@ -199,29 +199,6 @@ body {
   user-select: none;
 }
 
-.pg-icon-btn {
-  border: var(--hl-border-w-thin) solid var(--hl-border);
-  background: var(--hl-accent);
-  color: var(--hl-accent-fg);
-  border-radius: var(--hl-radius-sm);
-  cursor: pointer;
-  font-family: inherit;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 10px;
-  font-size: var(--font_size_md, 14px);
-  font-weight: var(--font_weight_semibold);
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.pg-icon-btn#pg-new-icon {
-  width: auto;
-  min-width: 0;
-  height: 24px;
-}
-
 .pg-project-list {
   list-style: none;
   flex: 1 1 auto;

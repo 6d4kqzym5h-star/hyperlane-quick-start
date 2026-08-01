@@ -47,7 +47,7 @@
     pollStartedAt: 0,
   };
 
-  function $(id) {
+  function $ (id) {
     return document.getElementById(id);
   }
 
@@ -312,7 +312,7 @@
     if (state.projects.length === 0) {
       const li = document.createElement('li');
       li.className = 'pg-empty';
-      li.textContent = 'No projects yet. Click + to start.';
+      li.textContent = 'No projects yet. Click New to start.';
       list.appendChild(li);
       return;
     }
@@ -677,8 +677,8 @@
       setStatus('Build timed out', 'error');
       showStderr(
         'Build did not finish within ' +
-          Math.round(POLL_TIMEOUT_MS / 1000) +
-          's. Check the server logs.',
+        Math.round(POLL_TIMEOUT_MS / 1000) +
+        's. Check the server logs.',
       );
       return;
     }
@@ -839,7 +839,6 @@
     }
 
     bindButton('pg-new', 'hyperlane-click', createAndOpen);
-    bindButton('pg-new-icon', 'click', createAndOpen);
     bindButton('pg-share', 'hyperlane-click', shareCurrentBuild);
     bindButton('pg-run', 'hyperlane-click', runCurrent);
     const retryBtn = $('pg-editor-loading-retry');
@@ -938,8 +937,9 @@
       setCurrentName('no project');
       const editor = $('pg-editor');
       if (editor) editor.setAttribute('readonly', '');
-      setProjectActionsEnabled(false);
-      setStatus('Click + to create your first project', '');
+      const runBtn = $('pg-run');
+      if (runBtn) runBtn.setAttribute('disabled', '');
+      setStatus('Click New to create your first project', '');
     }
     const userLabel = $('pg-user-label');
     if (userLabel) userLabel.textContent = 'Signed in';

@@ -44,9 +44,9 @@ pub const EUV_PLAYGROUND_MAX_NAME_LEN: usize = 64;
 pub const EUV_PLAYGROUND_MAX_LIST_ITEMS: usize = 200;
 
 /// Default timeout for a single `wasm-pack build` invocation. Cold builds
-/// can take ~30s while euv + wasm-bindgen are compiled from scratch;
-/// subsequent runs are typically <2s once the cargo target dir is warm.
-pub const EUV_PLAYGROUND_BUILD_TIMEOUT_SECS: u64 = 6000;
+/// can take several minutes while euv + wasm-bindgen are compiled from
+/// scratch; subsequent runs reuse the shared Cargo target directory.
+pub const EUV_PLAYGROUND_BUILD_TIMEOUT_SECS: u64 = 1200;
 
 /// Root directory under `data/` where all per-user playground projects
 /// are persisted. Layout:
@@ -188,21 +188,21 @@ wasm-opt = [
 ]
 
 [profile.dev]
-incremental = false
-opt-level = "z"
-lto = true
+incremental = true
+opt-level = 1
+lto = false
 panic = "unwind"
 debug = false
-codegen-units = 1
+codegen-units = 16
 strip = "debuginfo"
 
 [profile.release]
-incremental = false
-opt-level = "z"
-lto = true
+incremental = true
+opt-level = 2
+lto = false
 panic = "unwind"
 debug = false
-codegen-units = 1
+codegen-units = 16
 strip = "debuginfo"
 "#;
 

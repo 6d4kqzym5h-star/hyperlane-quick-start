@@ -8,11 +8,11 @@
   const API_RUN_STATUS = (jobId) => '/api/euv/playground/run/status/' + jobId;
   const API_DEFAULT_CODE = '/api/euv/playground/default-code';
   const POLL_INTERVAL_MS = 1500;
-  const POLL_TIMEOUT_MS = 10 * 60 * 1000;
+  const POLL_TIMEOUT_MS = 20 * 60 * 1000;
   const STORAGE_KEY = '[euv-playground]last_project_id';
   let cachedDefaultCode = '';
 
-  async function fetchDefaultCode() {
+  async function fetchDefaultCode () {
     const r = await apiJson(API_DEFAULT_CODE, { method: 'GET' });
     if (
       r.resp.ok &&
@@ -51,7 +51,7 @@
     return document.getElementById(id);
   }
 
-  function setStatus(text, kind) {
+  function setStatus (text, kind) {
     const el = $('pg-status');
     if (!el) return;
     if (text) el.setAttribute('message', text);
@@ -61,12 +61,12 @@
     else el.setAttribute('type', 'success');
   }
 
-  function setCurrentName(name) {
+  function setCurrentName (name) {
     const el = $('pg-current-name');
     if (el) el.textContent = name || 'no project';
   }
 
-  function setProjectActionsEnabled(enabled) {
+  function setProjectActionsEnabled (enabled) {
     ['pg-new', 'pg-run'].forEach(function (id) {
       const button = $(id);
       if (!button) return;
@@ -75,12 +75,12 @@
     });
   }
 
-  function setPreviewUrl(text) {
+  function setPreviewUrl (text) {
     const el = $('pg-preview-url');
     if (el) el.textContent = text || '';
   }
 
-  function showPreviewLoading(text) {
+  function showPreviewLoading (text) {
     const overlay = $('pg-preview-loading');
     const textEl = overlay ? overlay.querySelector('.pg-loading-text') : null;
     const iframe = $('pg-preview');
@@ -89,12 +89,12 @@
     if (overlay) overlay.classList.remove('is-hidden');
   }
 
-  function hidePreviewLoading() {
+  function hidePreviewLoading () {
     const overlay = $('pg-preview-loading');
     if (overlay) overlay.classList.add('is-hidden');
   }
 
-  function resetPreviewPane() {
+  function resetPreviewPane () {
     const iframe = $('pg-preview');
     if (iframe) {
       iframe.removeAttribute('src');
@@ -105,7 +105,7 @@
     hidePreviewLoading();
   }
 
-  function showStderr(text) {
+  function showStderr (text) {
     const stderr = $('pg-stderr');
     const iframe = $('pg-preview');
     if (stderr) {
@@ -116,7 +116,7 @@
     hidePreviewLoading();
   }
 
-  function clearStderr() {
+  function clearStderr () {
     const stderr = $('pg-stderr');
     const iframe = $('pg-preview');
     if (stderr) {
@@ -126,18 +126,18 @@
     if (iframe) iframe.style.display = 'block';
   }
 
-  function scrollStderrToTop() {
+  function scrollStderrToTop () {
     const stderr = $('pg-stderr');
     if (stderr) stderr.scrollTop = 0;
   }
 
-  function toast(text, kind) {
+  function toast (text, kind) {
     const el = $('pg-toast');
     if (!el || !el.show) return;
     el.show(text, kind === 'error' ? 'error' : 'success', 2400);
   }
 
-  function fmtTimeAgo(ms) {
+  function fmtTimeAgo (ms) {
     if (!ms) return '';
     const diff = Date.now() - ms;
     if (diff < 0) return 'just now';
@@ -148,13 +148,13 @@
     return Math.floor(diff / 86400000) + 'd ago';
   }
 
-  function fmtSize(n) {
+  function fmtSize (n) {
     if (n < 1024) return n + ' B';
     if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
     return (n / (1024 * 1024)).toFixed(2) + ' MB';
   }
 
-  async function apiJson(url, opts) {
+  async function apiJson (url, opts) {
     const resp = await fetch(url, opts);
     const text = await resp.text();
     let body = null;
@@ -168,7 +168,7 @@
     return { resp, body, raw: text };
   }
 
-  async function fetchProjects() {
+  async function fetchProjects () {
     try {
       const { resp, body } = await apiJson(API_LIST, {
         method: 'GET',
@@ -181,12 +181,12 @@
       }
       state.authed = true;
       state.projects = (body && body.data) || [];
-    } catch (e) {}
+    } catch (e) { }
     state.projectsLoaded = true;
     renderProjectList();
   }
 
-  function redirectToAuth() {
+  function redirectToAuth () {
     try {
       const here = window.location.pathname + window.location.search;
       const target =
@@ -197,7 +197,7 @@
     }
   }
 
-  async function createProject(name) {
+  async function createProject (name) {
     try {
       const r = await apiJson(API_CREATE, {
         method: 'POST',
@@ -219,7 +219,7 @@
     }
   }
 
-  async function loadProject(id) {
+  async function loadProject (id) {
     const r = await apiJson(API_GET(id), {
       method: 'GET',
       credentials: 'include',
@@ -231,7 +231,7 @@
     return r.body.data;
   }
 
-  async function saveProject(id, name, code) {
+  async function saveProject (id, name, code) {
     const r = await apiJson(API_SAVE(id), {
       method: 'PUT',
       credentials: 'include',
@@ -245,7 +245,7 @@
     return r.body.data;
   }
 
-  async function deleteProject(id) {
+  async function deleteProject (id) {
     const r = await apiJson(API_DELETE(id), {
       method: 'DELETE',
       credentials: 'include',
@@ -257,7 +257,7 @@
     return true;
   }
 
-  async function runProject(id, code) {
+  async function runProject (id, code) {
     const r = await apiJson(API_RUN, {
       method: 'POST',
       credentials: 'include',
@@ -273,7 +273,7 @@
     return r.body.data || { ok: false, stderr: 'Empty response' };
   }
 
-  async function fetchBuildStatus(jobId) {
+  async function fetchBuildStatus (jobId) {
     const r = await apiJson(API_RUN_STATUS(jobId), {
       method: 'GET',
       credentials: 'include',
@@ -284,7 +284,7 @@
     return r.body.data;
   }
 
-  function renderSignedOut() {
+  function renderSignedOut () {
     const list = $('pg-project-list');
     if (list) {
       list.innerHTML = '';
@@ -302,7 +302,7 @@
     setStatus('Sign in required', 'error');
   }
 
-  function renderProjectList() {
+  function renderProjectList () {
     const list = $('pg-project-list');
     if (!list) return;
     if (!state.projectsLoaded) {
@@ -351,7 +351,7 @@
     });
   }
 
-  function updateProjectInList(id, patch) {
+  function updateProjectInList (id, patch) {
     const idx = state.projects.findIndex(function (p) {
       return p.id === id;
     });
@@ -370,7 +370,7 @@
     renderProjectList();
   }
 
-  async function switchToProject(id) {
+  async function switchToProject (id) {
     cancelPendingSave();
     if (state.dirty && state.current) {
       await flushSaveNow();
@@ -414,7 +414,7 @@
     persistLastId(id);
   }
 
-  async function createAndOpen() {
+  async function createAndOpen () {
     cancelPendingSave();
     const name = await promptForProjectName();
     if (!name) return;
@@ -423,7 +423,7 @@
     await loadDetailAndOpen(created.id, created.name);
   }
 
-  function promptForProjectName() {
+  function promptForProjectName () {
     return new Promise(function (resolve) {
       const dialog = $('pg-create-dialog');
       const form = $('pg-create-form');
@@ -492,7 +492,7 @@
     });
   }
 
-  async function loadDetailAndOpen(id, nameHint) {
+  async function loadDetailAndOpen (id, nameHint) {
     hideShareButton();
     resetPreviewPane();
     state.runToken += 1;
@@ -558,7 +558,7 @@
     persistLastId(id);
   }
 
-  async function deleteCurrent() {
+  async function deleteCurrent () {
     if (!state.current) return;
     const proj = state.current;
     if (
@@ -591,20 +591,20 @@
     }
   }
 
-  function cancelPendingSave() {
+  function cancelPendingSave () {
     if (state.saveTimer) {
       clearTimeout(state.saveTimer);
       state.saveTimer = null;
     }
   }
 
-  function scheduleSave() {
+  function scheduleSave () {
     if (!state.current) return;
     cancelPendingSave();
     state.saveTimer = setTimeout(flushSaveNow, 600);
   }
 
-  async function flushSaveNow() {
+  async function flushSaveNow () {
     cancelPendingSave();
     if (!state.current || !state.dirty) return;
     const editor = $('pg-editor');
@@ -629,7 +629,7 @@
     setStatus('Saved ' + fmtTimeAgo(saved.updated_at_ms), '');
   }
 
-  function onEditorInput() {
+  function onEditorInput () {
     if (!state.current) return;
     const editor = $('pg-editor');
     if (!editor) return;
@@ -646,7 +646,7 @@
     scheduleSave();
   }
 
-  function applyPreviewToIframe(htmlDoc, url) {
+  function applyPreviewToIframe (htmlDoc, url) {
     const iframe = $('pg-preview');
     if (!iframe) return;
     if (state.currentObjectUrl) {
@@ -659,14 +659,14 @@
     hidePreviewLoading();
   }
 
-  function cancelPoll() {
+  function cancelPoll () {
     if (state.pollTimer) {
       clearTimeout(state.pollTimer);
       state.pollTimer = null;
     }
   }
 
-  async function pollUntilDone(jobId, myToken) {
+  async function pollUntilDone (jobId, myToken) {
     if (Date.now() - state.pollStartedAt > POLL_TIMEOUT_MS) {
       if (myToken !== state.runToken) return;
       cancelPoll();
@@ -735,7 +735,7 @@
     }, POLL_INTERVAL_MS);
   }
 
-  async function runCurrent() {
+  async function runCurrent () {
     if (state.running) {
       toast('Build already in progress…', 'info');
       return;
@@ -799,24 +799,24 @@
     }
   }
 
-  function persistLastId(id) {
+  function persistLastId (id) {
     try {
       window.localStorage.setItem(STORAGE_KEY, String(id));
-    } catch (e) {}
+    } catch (e) { }
   }
 
-  function readLastId() {
+  function readLastId () {
     try {
       const v = window.localStorage.getItem(STORAGE_KEY);
       if (v) {
         const n = parseInt(v, 10);
         if (!isNaN(n)) return n;
       }
-    } catch (e) {}
+    } catch (e) { }
     return null;
   }
 
-  function bindButton(id, eventNames, handler) {
+  function bindButton (id, eventNames, handler) {
     const el = $(id);
     if (!el) return;
     const events = Array.isArray(eventNames) ? eventNames : [eventNames];
@@ -825,7 +825,7 @@
     });
   }
 
-  function initUi() {
+  function initUi () {
     const editor = $('pg-editor');
     if (editor) {
       const wireEditorOnChange = function () {
@@ -895,10 +895,10 @@
     });
   }
 
-  function waitFor(predicate, timeoutMs) {
+  function waitFor (predicate, timeoutMs) {
     return new Promise(function (resolve) {
       const start = Date.now();
-      (function tick() {
+      (function tick () {
         if (predicate()) return resolve();
         if (Date.now() - start > timeoutMs) return resolve();
         setTimeout(tick, 50);
@@ -906,7 +906,7 @@
     });
   }
 
-  async function boot() {
+  async function boot () {
     await waitFor(function () {
       return (
         !!customElements.get('hyperlane-button') &&
@@ -946,14 +946,14 @@
     hideEditorLoading();
   }
 
-  function setEditorLoadingMessage(text) {
+  function setEditorLoadingMessage (text) {
     const stateEl = $('pg-editor-loading-state');
     if (!stateEl) return;
     const textEl = stateEl.querySelector('.pg-loading-text');
     if (textEl) textEl.textContent = text || 'Loading…';
   }
 
-  function showEditorError(message) {
+  function showEditorError (message) {
     const container = $('pg-editor-loading');
     const stateEl = $('pg-editor-loading-state');
     const errorEl = $('pg-editor-loading-error');
@@ -966,7 +966,7 @@
     if (editor) editor.setAttribute('readonly', '');
   }
 
-  function showEditorLoading(text) {
+  function showEditorLoading (text) {
     const container = $('pg-editor-loading');
     const stateEl = $('pg-editor-loading-state');
     const errorEl = $('pg-editor-loading-error');
@@ -981,7 +981,7 @@
     if (editor) editor.setAttribute('readonly', '');
   }
 
-  function hideEditorLoading() {
+  function hideEditorLoading () {
     const container = $('pg-editor-loading');
     const stateEl = $('pg-editor-loading-state');
     const errorEl = $('pg-editor-loading-error');
@@ -996,18 +996,18 @@
     if (editor) editor.removeAttribute('readonly');
   }
 
-  function showShareButton() {
+  function showShareButton () {
     const btn = $('pg-share');
     if (btn) btn.removeAttribute('hidden');
   }
 
-  function hideShareButton() {
+  function hideShareButton () {
     const btn = $('pg-share');
     if (btn) btn.setAttribute('hidden', '');
     state.lastBuildUrl = '';
   }
 
-  async function shareCurrentBuild() {
+  async function shareCurrentBuild () {
     const url = state.lastBuildUrl;
     if (!url) {
       toast('No build URL yet. Run the project first.', 'error');
@@ -1034,7 +1034,7 @@
       try {
         document.execCommand('copy');
         copied = true;
-      } catch (e) {}
+      } catch (e) { }
       document.body.removeChild(ta);
     }
     if (copied) {
@@ -1044,7 +1044,7 @@
     }
   }
 
-  async function retryLoadCurrentProject() {
+  async function retryLoadCurrentProject () {
     if (!state.current || !state.current.id) return;
     const id = state.current.id;
     hideShareButton();
